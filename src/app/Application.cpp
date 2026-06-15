@@ -86,33 +86,31 @@ namespace raylibgl::app {
             model::drawAxes(2.5f);
         }
 
-        // Super-basic "car": red box body...
-        model::drawBox({2.0f, 2.0f, 2.0f}, RED);
+        // Super-basic "car" using raylib's built-in primitives.
+        // Body: red cube centered at the origin.
+        DrawCubeV(Vector3{0.0f, 0.0f, 0.0f}, Vector3{2.0f, 2.0f, 2.0f}, RED);
 
-        // ...plus 4 green wheels. One cylinder template, placed at the 4 corners
-        // (left/right = +/-X, front/back = +/-Z) with a -Z = front convention.
-        // Each wheel's axis runs left-right (X), so we rotate the Y-axis cylinder
-        // 90 degrees about Z to lay it down. This is the matrix-stack + symmetry
-        // pattern the real car will use.
+        // 4 green wheels. DrawCylinderEx takes the two end-cap centers, so the
+        // axle runs left-right (X) just by offsetting in X - no rotation needed.
+        const float wheelRadius = 0.4f;
+        const float wheelHalfWidth = 0.25f;
         for (int sx = -1; sx <= 1; sx += 2) {     // -1 = left,  +1 = right
             for (int sz = -1; sz <= 1; sz += 2) { // -1 = front, +1 = back
-                rlPushMatrix();
-                rlTranslatef(sx * 1.0f, -0.8f, sz * 0.6f);
-                rlRotatef(90.0f, 0.0f, 0.0f, 1.0f); // Y-axis cylinder -> X axis
-                model::drawCylinder(0.4f, 0.5f, 16, GREEN);
-                rlPopMatrix();
+                const float x = sx * 1.0f, y = -0.8f, z = sz * 0.6f;
+                DrawCylinderEx(Vector3{x - wheelHalfWidth, y, z},
+                               Vector3{x + wheelHalfWidth, y, z},
+                               wheelRadius, wheelRadius, 16, GREEN);
             }
         }
 
-        // ...and 2 yellow lights on the front (-Z). Their axis runs front-back
-        // (Z), so we rotate the Y-axis cylinder 90 degrees about X. Mirror pair
-        // in X, poking out of the front face.
+        // 2 yellow lights on the +Z face. Axle runs front-back (Z).
+        const float lightRadius = 0.2f;
+        const float lightHalfDepth = 0.2f;
         for (int sx = -1; sx <= 1; sx += 2) {
-            rlPushMatrix();
-            rlTranslatef(sx * 0.5f, 0.15f, 1.0f);
-            rlRotatef(90.0f, 1.0f, 0.0f, 0.0f); // Y-axis cylinder -> Z axis
-            model::drawCylinder(0.2f, 0.4f, 16, YELLOW);
-            rlPopMatrix();
+            const float x = sx * 0.5f, y = 0.15f, z = 1.0f;
+            DrawCylinderEx(Vector3{x, y, z - lightHalfDepth},
+                           Vector3{x, y, z + lightHalfDepth},
+                           lightRadius, lightRadius, 16, YELLOW);
         }
 
         rlPopMatrix();
