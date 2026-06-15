@@ -1,7 +1,7 @@
 #pragma once
 
-#include "app/CameraControls.hpp"
 #include "app/DebugControls.hpp"
+#include "app/TrackballCamera.hpp"
 
 
 namespace raylibgl::app {
@@ -28,7 +28,9 @@ namespace raylibgl::app {
         int m_height = 0;
         const char *m_title;
 
-        camera::OrbitCamera m_camera{};
+        camera::TrackballCamera m_camera{};
+
+        bool m_showAxes = true; // toggled with 'A'
     };
 
 } // namespace raylibgl::app
