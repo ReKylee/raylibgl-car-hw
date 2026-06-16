@@ -30,7 +30,8 @@ namespace raylibgl::app {
 
         camera::TrackballCamera m_camera{};
 
-        bool m_showAxes = true; // toggled with 'A'
+        bool m_showAxes = true;   // toggled with 'A'
+        bool m_wireframe = false; // toggled with 'P'
     };
 
 } // namespace raylibgl::app

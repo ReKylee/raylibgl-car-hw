@@ -54,6 +54,10 @@ namespace raylibgl::app {
             m_showAxes = !m_showAxes;
         }
 
+        if (IsKeyPressed(KEY_P)) {
+            m_wireframe = !m_wireframe;
+        }
+
         m_camera.Update(m_width, m_height);
     }
 
@@ -86,20 +90,23 @@ namespace raylibgl::app {
             model::drawAxes(2.5f);
         }
 
-        // Super-basic "car" using raylib's built-in primitives.
-        // Body: red cube centered at the origin.
-        DrawCubeV(Vector3{0.0f, 0.0f, 0.0f}, Vector3{2.0f, 2.0f, 2.0f}, RED);
+        // Super-basic "car" via the wire-aware helpers: each picks the filled
+        // or wireframe raylib call based on `wire` ('P' toggle).
+        const bool wire = m_wireframe;
 
-        // 4 green wheels. DrawCylinderEx takes the two end-cap centers, so the
-        // axle runs left-right (X) just by offsetting in X - no rotation needed.
+        // Body: red cube centered at the origin.
+        model::drawBox(Vector3{0.0f, 0.0f, 0.0f}, Vector3{2.0f, 2.0f, 2.0f}, RED, wire);
+
+        // 4 green wheels. The cylinder is placed by its two end-cap centers, so
+        // the axle runs left-right (X) just by offsetting in X - no rotation.
         const float wheelRadius = 0.4f;
         const float wheelHalfWidth = 0.25f;
         for (int sx = -1; sx <= 1; sx += 2) {     // -1 = left,  +1 = right
             for (int sz = -1; sz <= 1; sz += 2) { // -1 = front, +1 = back
                 const float x = sx * 1.0f, y = -0.8f, z = sz * 0.6f;
-                DrawCylinderEx(Vector3{x - wheelHalfWidth, y, z},
-                               Vector3{x + wheelHalfWidth, y, z},
-                               wheelRadius, wheelRadius, 16, GREEN);
+                model::drawCylinder(Vector3{x - wheelHalfWidth, y, z},
+                                    Vector3{x + wheelHalfWidth, y, z},
+                                    wheelRadius, GREEN, wire);
             }
         }
 
@@ -108,9 +115,9 @@ namespace raylibgl::app {
         const float lightHalfDepth = 0.2f;
         for (int sx = -1; sx <= 1; sx += 2) {
             const float x = sx * 0.5f, y = 0.15f, z = 1.0f;
-            DrawCylinderEx(Vector3{x, y, z - lightHalfDepth},
-                           Vector3{x, y, z + lightHalfDepth},
-                           lightRadius, lightRadius, 16, YELLOW);
+            model::drawCylinder(Vector3{x, y, z - lightHalfDepth},
+                                Vector3{x, y, z + lightHalfDepth},
+                                lightRadius, YELLOW, wire);
         }
 
         rlPopMatrix();

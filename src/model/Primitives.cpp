@@ -25,4 +25,20 @@ namespace raylibgl::model {
         rlEnd();
     }
 
+    void drawBox(Vector3 center, Vector3 size, Color color, bool wire) {
+        if (wire) {
+            DrawCubeWiresV(center, size, color);
+        } else {
+            DrawCubeV(center, size, color);
+        }
+    }
+
+    void drawCylinder(Vector3 start, Vector3 end, float radius, Color color, bool wire, int sides) {
+        if (wire) {
+            DrawCylinderWiresEx(start, end, radius, radius, sides, color);
+        } else {
+            DrawCylinderEx(start, end, radius, radius, sides, color);
+        }
+    }
+
 } // namespace raylibgl::model
