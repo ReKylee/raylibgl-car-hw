@@ -1,6 +1,7 @@
 #include "app/Application.hpp"
 
 #include "model/Primitives.hpp"
+#include "model/Scooby-van.hpp"
 
 #include "raymath.h"
 #include "rlgl.h"
@@ -90,35 +91,9 @@ namespace raylibgl::app {
             model::drawAxes(2.5f);
         }
 
-        // Super-basic "car" via the wire-aware helpers: each picks the filled
-        // or wireframe raylib call based on `wire` ('P' toggle).
-        const bool wire = m_wireframe;
-
-        // Body: red cube centered at the origin.
-        model::drawBox(Vector3{0.0f, 0.0f, 0.0f}, Vector3{2.0f, 2.0f, 2.0f}, RED, wire);
-
-        // 4 green wheels. The cylinder is placed by its two end-cap centers, so
-        // the axle runs left-right (X) just by offsetting in X - no rotation.
-        const float wheelRadius = 0.4f;
-        const float wheelHalfWidth = 0.25f;
-        for (int sx = -1; sx <= 1; sx += 2) {     // -1 = left,  +1 = right
-            for (int sz = -1; sz <= 1; sz += 2) { // -1 = front, +1 = back
-                const float x = sx * 1.0f, y = -0.8f, z = sz * 0.6f;
-                model::drawCylinder(Vector3{x - wheelHalfWidth, y, z},
-                                    Vector3{x + wheelHalfWidth, y, z},
-                                    wheelRadius, GREEN, wire);
-            }
-        }
-
-        // 2 yellow lights on the +Z face. Axle runs front-back (Z).
-        const float lightRadius = 0.2f;
-        const float lightHalfDepth = 0.2f;
-        for (int sx = -1; sx <= 1; sx += 2) {
-            const float x = sx * 0.5f, y = 0.15f, z = 1.0f;
-            model::drawCylinder(Vector3{x, y, z - lightHalfDepth},
-                                Vector3{x, y, z + lightHalfDepth},
-                                lightRadius, YELLOW, wire);
-        }
+        // The Mystery Machine van. Each part picks the filled or wireframe
+        // raylib call based on `wire` (the 'P' toggle).
+        model::drawCar(m_wireframe);
 
         rlPopMatrix();
     }

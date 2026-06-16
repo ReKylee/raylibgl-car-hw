@@ -50,6 +50,7 @@ src/
     DebugControls.{hpp,cpp}    (inherited, currently disabled/commented)
   model/
     Primitives.{hpp,cpp}   small draw helpers: drawAxes, drawBox, drawCylinder
+    Scooby-van.{hpp,cpp}   the van model: drawChassis / drawWheel / drawCar
 car-parts.md               traced part positions/sizes for the van (build reference)
 ```
 
@@ -59,23 +60,40 @@ car-parts.md               traced part positions/sizes for the van (build refere
   the trackball (assignment Appendix A). The rotation is applied to the geometry
   via `rlMultMatrixf` inside `BeginMode3D` — i.e. the **world rotates about the
   origin in the ModelView**, the camera does not move.
-- **Drawing:** the scene is drawn in `Application::drawSceneRlgl()` using raylib
-  built-ins (`DrawCubeV`, `DrawCylinderEx`) wrapped by `model::drawBox` /
-  `model::drawCylinder`, which select the filled or `...Wires` variant based on
-  the wireframe toggle. Parts are composed with the rlgl matrix stack
-  (`rlPushMatrix` / `rlTranslatef` / `rlRotatef`).
+- **Drawing:** `Application::drawSceneRlgl()` calls `model::drawCar()`, which
+  composes the van from `drawChassis` / `drawWheel` (+ inline roof-rack, bumper
+  and door parts) using the rlgl matrix stack (`rlPushMatrix` / `rlTranslatef`).
+  `drawCar` re-centers the model's visual center (0, 1.24, 0) onto the origin so
+  the trackball rotates about the middle of the van. Parts that map to a box or
+  cylinder use `model::drawBox` / `model::drawCylinder` (which pick the filled or
+  `...Wires` variant from the wireframe toggle); the tapered body and the door
+  use a local `drawExtrudedX` helper — a Y-Z silhouette extruded along X, with
+  ear-clipping triangulated end-caps so concave profiles (e.g. the door) render
+  correctly. Coordinates throughout match `car-parts.md` (Y up, front = −Z).
 - **Culling:** back-face culling is on (`rlEnableBackfaceCulling`, CCW = front).
 
 ## Status
 
 **Done:** resizable window, virtual trackball, perspective + zoom, back-face
-culling, axes toggle (`A`), wireframe toggle (`P`), primitive wrappers, and a
-super-basic placeholder "car" (box body + 4 cylinder wheels + 2 cylinder lights).
+culling, axes toggle (`A`), wireframe toggle (`P`), primitive wrappers.
+
+**Van model (in progress):** the placeholder car is replaced by the real van in
+`model/Scooby-van.{hpp,cpp}`, built incrementally from `car-parts.md`:
+- **Chassis** — done: one turquoise tapered solid (hexagonal Y-Z side profile
+  extruded along X), not two boxes.
+- **Tires ×4** — done: dark cylinders, axle along X, placed at the four corners.
+- **Roof rack** — done: 2 metal-grey slat boxes on the roof.
+- **Bumpers** — done: 2 metal-grey boxes at the front/back.
+- **Doors — WORK IN PROGRESS:** currently a darker-turquoise filled *trapezoid*
+  panel per side (extruded thin slab), shape still being tuned. **TODO:** the
+  assignment requires doors as **wireframe lines** (door-seam outline, always
+  drawn as lines regardless of `P`) — not yet added.
+- **Windows** — TODO: filled (windshield + side windows).
+- **Front lights ×2** — TODO: cylinder + disks on the −Z face.
 
 **Next (in order):**
-1. Model the real van from `car-parts.md` — chassis (filled), doors (wireframe
-   lines), windows (filled), 4 tires, 2 front lights; hierarchical via the
-   matrix stack, mirrored with negative scaling.
+1. Finish the doors (settle the trapezoid shape, add the required wireframe
+   seams), then windows and the 2 front lights.
 2. Lighting — 2 positional lights, diffuse + specular, materials, normals.
 3. Light-source markers + `L` toggle (emissive spheres).
 
