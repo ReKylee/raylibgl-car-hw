@@ -50,7 +50,7 @@ src/
     DebugControls.{hpp,cpp}    (inherited, currently disabled/commented)
   model/
     Primitives.{hpp,cpp}   small draw helpers: drawAxes, drawBox, drawCylinder
-    Scooby-van.{hpp,cpp}   the van model: drawChassis / drawWheel / drawCar
+    Scooby-van.{hpp,cpp}   the van model: drawChassis / drawWheel / drawLight / drawCar
 car-parts.md               traced part positions/sizes for the van (build reference)
 ```
 
@@ -77,25 +77,33 @@ car-parts.md               traced part positions/sizes for the van (build refere
 **Done:** resizable window, virtual trackball, perspective + zoom, back-face
 culling, axes toggle (`A`), wireframe toggle (`P`), primitive wrappers.
 
-**Van model (in progress):** the placeholder car is replaced by the real van in
-`model/Scooby-van.{hpp,cpp}`, built incrementally from `car-parts.md`:
+**Van model:** the placeholder car is replaced by the real Mystery Machine van
+in `model/Scooby-van.{hpp,cpp}`, built incrementally from `car-parts.md` and
+composed in `drawCar` via the rlgl matrix stack (each part modeled once at a
+local origin and mirrored with `rlTranslatef`). Required features:
 - **Chassis** — done: one turquoise tapered solid (hexagonal Y-Z side profile
-  extruded along X), not two boxes.
-- **Tires ×4** — done: dark cylinders, axle along X, placed at the four corners.
-- **Roof rack** — done: 2 metal-grey slat boxes on the roof.
-- **Bumpers** — done: 2 metal-grey boxes at the front/back.
-- **Doors — WORK IN PROGRESS:** currently a darker-turquoise filled *trapezoid*
-  panel per side (extruded thin slab), shape still being tuned. **TODO:** the
-  assignment requires doors as **wireframe lines** (door-seam outline, always
-  drawn as lines regardless of `P`) — not yet added.
-- **Windows** — TODO: filled (windshield + side windows).
-- **Front lights ×2** — TODO: cylinder + disks on the −Z face.
+  extruded along X via `drawExtrudedX`), not two boxes. Filled polygons.
+- **Doors** — done: a darker-turquoise filled *trapezoid* panel per side (5-vertex
+  profile) **plus the required door-seam outline drawn as wireframe lines, always
+  (independent of `P`)** — `drawProfileOutline`.
+- **Windows** — **TODO (required):** filled polygons (windshield + side windows).
+  The only required modeling element still missing. (Intended approach: flat
+  filled quads laid on the body faces, nudged slightly proud to avoid z-fighting
+  — prototyped once, then reverted.)
+- **Tires ×4** — done: dark cylinders bounded by disks, axle along X, at the four
+  corners.
+- **Front lights ×2** — done as geometry: yellow cylinders bounded by disks on the
+  −Z face (no light source yet — see lighting below).
 
-**Next (in order):**
-1. Finish the doors (settle the trapezoid shape, add the required wireframe
-   seams), then windows and the 2 front lights.
-2. Lighting — 2 positional lights, diffuse + specular, materials, normals.
-3. Light-source markers + `L` toggle (emissive spheres).
+Embellishments (allowed extras): metal-grey roof-rack slats, front/back bumpers,
+yellow rear tail-lights, a front-mounted spare tire, and side mirrors.
+
+**Still required (left to the lighting pass — being handled separately):**
+1. Lighting — ≥2 positional lights, demonstrate diffuse + specular, set
+   materials, hand-set normals (enable `GL_NORMALIZE`-equivalent). Custom geometry
+   here (`drawExtrudedX`, the door outline) currently emits **no `rlNormal3f`** —
+   normals must be added for correct shading.
+2. Light-source marker spheres + `L` toggle (emissive only).
 
 ### Known caveats
 - **Built-in cylinders have no normals** ([raylib #4808](https://github.com/raysan5/raylib/issues/4808)),
@@ -105,8 +113,8 @@ culling, axes toggle (`A`), wireframe toggle (`P`), primitive wrappers.
 - **`glPolygonMode` wireframe** (`rlEnableWireMode`) rendered nothing on this
   setup, so wireframe uses the `...Wires` line variants instead (reliable, and
   portable to GLES/web).
-- **Doors must be wireframe lines** as a modeling requirement — independent of
-  the `P` toggle.
+- **Doors are wireframe lines** (a modeling requirement) — the seam outline is
+  drawn as lines always, independent of the `P` toggle, via `drawProfileOutline`.
 
 ## Reference model
 

@@ -18,6 +18,11 @@ namespace raylibgl::model {
     // drawCar places four of these.
     void drawWheel(bool wire);
 
+    // One front light: a yellow cylinder bounded by disks, axis along Z,
+    // centered at the local origin. drawCar mirrors it left/right. (Geometry
+    // only — no actual light source.)
+    void drawLight(bool wire);
+
     // Whole van, re-centered so its visual center (0, 1.24, 0) sits on the
     // origin (the trackball rotation pivot).
     void drawCar(bool wire);

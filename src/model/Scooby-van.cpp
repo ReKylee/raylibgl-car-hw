@@ -25,6 +25,13 @@ namespace raylibgl::model {
         // Door panels: a slightly darker turquoise than the body.
         constexpr Color DOOR_TURQUOISE = Color{45, 155, 135, 255};
 
+        // Door-seam outline (the required wireframe-lines element): a dark teal
+        // that reads as a seam against the turquoise.
+        constexpr Color DOOR_SEAM_LINE = Color{20, 55, 48, 255};
+
+        // For front tire
+        constexpr Color TIRE_ORANGE = Color{250, 115, 40, 255};
+
         // A point on the body's side silhouette, in the Y-Z plane (front = -Z).
         struct ProfilePt {
             float y;
@@ -57,11 +64,16 @@ namespace raylibgl::model {
         // Door: a trapezoid (not a rectangle) — the front edge slants back as it
         // rises, following the body. Same Y-Z profile convention as the body
         // (CCW from -X); extruded as a thin slab laid on the side surface.
+        // 5 vertices: a rectangle (square) with a trapezoid on top. The back
+        // edge is straight/vertical; the front edge bends — vertical along the
+        // lower "square", then slanting back over the upper "trapezoid". The
+        // extra vertex (mid-front) is that bend on the front side.
         constexpr ProfilePt DOOR_PROFILE[] = {
-            {0.50f, -1.05f}, // bottom-front
-            {0.50f, -0.10f}, // bottom-back
-            {1.90f, -0.10f}, // top-back  (vertical back edge)
-            {1.90f, -1.45f}, // top-front (front edge slants forward going up)
+            {0.50f, -1.50f}, // bottom-front
+            {0.50f, -0.50f}, // bottom-back
+            {2.30f, -0.50f}, // top-back   (back edge vertical)
+            {2.30f, -1.00f}, // top-front  (pulled back -> trapezoid top)
+            {1.50f, -1.50f}, // mid-front  (bend: square below, trapezoid above)
         };
         constexpr int DOOR_PROFILE_N = sizeof(DOOR_PROFILE) / sizeof(DOOR_PROFILE[0]);
         constexpr float DOOR_HALF_THICK = 0.04f; // slab thickness along X
@@ -219,6 +231,20 @@ namespace raylibgl::model {
             rlEnd();
         }
 
+        // Draw `profile` as a closed line loop on the plane x = px. Used for the
+        // door seam — always drawn as lines, regardless of the wireframe toggle.
+        void drawProfileOutline(const ProfilePt *profile, int n, float px, Color c) {
+            rlBegin(RL_LINES);
+            rlColor4ub(c.r, c.g, c.b, c.a);
+            for (int i = 0; i < n; ++i) {
+                const ProfilePt &a = profile[i];
+                const ProfilePt &b = profile[(i + 1) % n];
+                rlVertex3f(px, a.y, a.z);
+                rlVertex3f(px, b.y, b.z);
+            }
+            rlEnd();
+        }
+
     } // namespace
 
     void drawChassis(bool wire) {
@@ -233,6 +259,15 @@ namespace raylibgl::model {
         // Cylinder spanning the axle (X), placed by its two end-cap centers.
         drawCylinder(Vector3{-TIRE_HALF_W, 0.0f, 0.0f}, Vector3{TIRE_HALF_W, 0.0f, 0.0f},
                      TIRE_RADIUS, TIRE_BLACK, wire);
+    }
+
+    void drawLight(bool wire) {
+        // Headlight: a short cylinder bounded by disks, axis along Z (car-parts:
+        // r ~ 0.17, depth ~ 0.12). Yellow geometry only — no light source.
+        constexpr float r = 0.25f;
+        constexpr float halfDepth = 0.06f;
+        drawCylinder(Vector3{0.0f, 0.0f, -halfDepth}, Vector3{0.0f, 0.0f, halfDepth},
+                     r, YELLOW, wire);
     }
 
     void drawCar(bool wire) {
@@ -287,14 +322,64 @@ namespace raylibgl::model {
             rlPopMatrix();
         }
 
-        // 2 doors: slightly darker turquoise trapezoid panels on each side,
-        // toward the front. The trapezoid profile is extruded into a thin slab
-        // and laid on the side surface (x = +/-BODY_HALF_W); modeled once and
-        // mirrored left/right.
+        // 2 doors on each side, toward the front. The darker-turquoise trapezoid
+        // panel is an embellishment (follows the P toggle like the body); the
+        // required door element is the seam *outline*, drawn as lines always.
+        // Profile extruded into a thin slab laid on the side (x = +/-BODY_HALF_W),
+        // modeled once and mirrored left/right.
+        constexpr float DOOR_SEAM_EPS = 0.01f; // nudge seam proud of the panel
         for (int sx = -1; sx <= 1; sx += 2) {
             rlPushMatrix();
             rlTranslatef(sx * BODY_HALF_W, 0.0f, 0.0f);
             drawExtrudedX(DOOR_PROFILE, DOOR_PROFILE_N, DOOR_HALF_THICK, DOOR_TURQUOISE, wire);
+            // Seam lines on the outer face (sign follows the side), always lines.
+            drawProfileOutline(DOOR_PROFILE, DOOR_PROFILE_N,
+                               sx * (DOOR_HALF_THICK + DOOR_SEAM_EPS), DOOR_SEAM_LINE);
+            rlPopMatrix();
+        }
+
+        // 2 front lights (car-parts.md): cylinders bounded by disks, axis along
+        // Z, x = +/-0.40, just above the bumper and proud of the -Z face. Model
+        // one, mirror in X.
+        constexpr float LIGHT_X = 0.70f;
+        constexpr float LIGHT_Y = 1.05f;
+        constexpr float LIGHT_Z = -1.88f; // pokes out of the front surface
+        for (int sx = -1; sx <= 1; sx += 2) {
+            rlPushMatrix();
+            rlTranslatef(sx * LIGHT_X, LIGHT_Y, LIGHT_Z);
+            drawLight(wire);
+            rlPopMatrix();
+        }
+
+        // 2 rear tail lights: small yellow boxes just above the back bumper.
+        constexpr Vector3 TAIL_SIZE = {0.30f, 0.22f, 0.12f};
+        constexpr float TAIL_X = 0.65f;
+        constexpr float TAIL_Y = 0.85f;
+        constexpr float TAIL_Z = 2.00f; // pokes out of the +Z face
+        for (int sx = -1; sx <= 1; sx += 2) {
+            rlPushMatrix();
+            rlTranslatef(sx * TAIL_X, TAIL_Y, TAIL_Z);
+            drawBox(Vector3{0.0f, 0.0f, 0.0f}, TAIL_SIZE, YELLOW, wire);
+            rlPopMatrix();
+        }
+
+        // Spare tire on the front: a dark cylinder, axis along Z, centered in X,
+        // poking out of the -Z face.
+        constexpr float SPARE_R = 0.45f;
+        constexpr float SPARE_Y = 1.25f;
+        drawCylinder(Vector3{0.0f, SPARE_Y, -1.85f}, Vector3{0.0f, SPARE_Y, -2.05f},
+                     SPARE_R, TIRE_ORANGE, wire);
+
+        // 2 side mirrors: small boxes sticking out from the body sides, up near
+        // the front. Model one, mirror left/right.
+        constexpr Vector3 MIRROR_SIZE = {0.40f, 0.25f, 0.10f};
+        constexpr float MIRROR_X = BODY_HALF_W + 0.10f; // outer face proud of body
+        constexpr float MIRROR_Y = 1.35f;
+        constexpr float MIRROR_Z = -1.30f;
+        for (int sx = -1; sx <= 1; sx += 2) {
+            rlPushMatrix();
+            rlTranslatef(sx * MIRROR_X, MIRROR_Y, MIRROR_Z);
+            drawBox(Vector3{0.0f, 0.0f, 0.0f}, MIRROR_SIZE, BODY_TURQUOISE, wire);
             rlPopMatrix();
         }
 
