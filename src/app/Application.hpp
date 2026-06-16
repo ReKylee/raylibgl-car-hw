@@ -3,35 +3,41 @@
 #include "app/DebugControls.hpp"
 #include "app/TrackballCamera.hpp"
 
+#include <raylib.h>
 
 namespace raylibgl::app {
 
     class Application {
     public:
-        Application(int width, int height, const char *title);
+        Application(int width, int height, const char* title);
         ~Application();
-
-        Application(const Application &) = delete;
-        Application &operator=(const Application &) = delete;
 
         void run();
 
     private:
-        void createTestScene();
         void update();
         void render();
-
         void drawSceneRlgl();
+        void drawCarWithOptionalLighting();
+        void drawLightMarkers();
 
-    private:
+        void loadLightingShader();
+        void unloadLightingShader();
+        void updateLightingShader();
+
         int m_width = 0;
         int m_height = 0;
-        const char *m_title;
+        const char* m_title = nullptr;
 
         camera::TrackballCamera m_camera{};
+        debug::State m_debugState{};
 
-        bool m_showAxes = true;   // toggled with 'A'
-        bool m_wireframe = false; // toggled with 'P'
+        Shader m_lightingShader{};
+        int m_viewPosLoc = -1;
+        int m_ambientLoc = -1;
+        int m_lightPosLoc[2] = {-1, -1};
+        int m_lightColorLoc[2] = {-1, -1};
+        int m_lightEnabledLoc[2] = {-1, -1};
     };
 
 } // namespace raylibgl::app

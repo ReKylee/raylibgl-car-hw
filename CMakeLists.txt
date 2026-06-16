@@ -32,6 +32,14 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(raylib)
 
+FetchContent_Declare(raygui
+    GIT_REPOSITORY https://github.com/raysan5/raygui.git
+    GIT_TAG master
+)
+
+FetchContent_MakeAvailable(raygui)
+
+
 # Handle different target names just in case.
 if (TARGET raylib)
     set(RAYLIB_TARGET raylib)
@@ -47,7 +55,7 @@ endif()
 # ----------------------------
 file(GLOB_RECURSE PROJECT_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cc"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cxx"
 )
 
@@ -76,8 +84,15 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${RAYLIB_TARGET})
 
-target_compile_options(${PROJECT_NAME} PRIVATE
-    $<$<CXX_COMPILER_ID:Clang>:-Wall -Wextra -Wpedantic>
+target_include_directories(${PROJECT_NAME}
+    SYSTEM PRIVATE
+        ${raygui_SOURCE_DIR}/src
+)
+target_compile_options(${PROJECT_NAME}
+    PRIVATE
+    $<$<COMPILE_LANG_AND_ID:CXX,Clang>:-Wall -Wextra -Wpedantic>
+    $<$<COMPILE_LANG_AND_ID:CXX,GNU>:-Wall -Wextra -Wpedantic>
+    $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/W4>
 )
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "Source" FILES ${PROJECT_SOURCES})

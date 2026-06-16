@@ -2,387 +2,705 @@
 
 #include "model/Primitives.hpp"
 
+#include <cmath>
+
+#include <raymath.h>
 #include <rlgl.h>
 
 namespace raylibgl::model {
 
     namespace {
 
-        // The Mystery Machine's signature turquoise body.
-        constexpr Color BODY_TURQUOISE = Color{60, 200, 175, 255};
 
-        // Tires: near-black (pure black would vanish against the black
-        // background; this still reads as black but stays visible unlit).
-        constexpr Color TIRE_BLACK = Color{28, 28, 32, 255};
+        constexpr Color BODY_TURQUOISE = Color{28, 181, 186, 255};
+        constexpr Color BODY_SHADE = Color{15, 128, 134, 255};
+        constexpr Color BODY_DARK = Color{8, 89, 94, 255};
+        constexpr Color TRIM_ORANGE = Color{237, 118, 40, 255};
+        constexpr Color TRIM_YELLOW = Color{247, 225, 111, 255};
+        constexpr Color TRIM_BLUE = Color{60, 167, 215, 255};
+        constexpr Color FLOWER_RED = Color{229, 79, 37, 255};
+        constexpr Color FLOWER_ORANGE = Color{250, 191, 74, 255};
+        constexpr Color METAL_GREY = Color{175, 185, 196, 255};
+        constexpr Color METAL_DARK = Color{104, 114, 126, 255};
+        constexpr Color RUBBER_BLACK = Color{24, 29, 35, 255};
+        constexpr Color HUBCAP_BLUE = Color{88, 190, 224, 255};
+        constexpr Color TAIL_RED = Color{215, 52, 48, 255};
+        constexpr Color GLASS_TINT = Color{185, 232, 255, 165};
+        constexpr Color GLASS_HILITE = Color{240, 250, 255, 215};
+        constexpr Color GLASS_FRAME = Color{18, 36, 44, 255};
+        constexpr Color SEAM_LINE = Color{18, 55, 60, 255};
+        constexpr Color BLACK_TRIM = Color{14, 18, 22, 255};
 
-        // Tire dimensions (car-parts.md): r ~ 0.41, width ~ 0.37, axle along X.
+        constexpr float BODY_HALF_W = 1.05f;
+        constexpr float SIDE_GRAPHIC_OFFSET = 0.019f;
+        constexpr float SIDE_FRAME_OFFSET = 0.016f;
+        constexpr float SIDE_GLASS_OFFSET = 0.018f;
+        constexpr float WINDSHIELD_FRAME_OFFSET = 0.012f;
+        constexpr float WINDSHIELD_GLASS_OFFSET = 0.018f;
+        constexpr float SEAM_OFFSET = 0.0205f;
+
         constexpr float TIRE_RADIUS = 0.41f;
-        constexpr float TIRE_HALF_W = 0.37f / 2.0f;
+        constexpr float TIRE_WIDTH = 0.34f;
+        constexpr int WHEEL_SIDES = 10;
+        constexpr int LIGHT_SIDES = 8;
+        constexpr int SPARE_SIDES = 10;
 
-        // Metal-grey trim: roof rack slats + front/back bumpers.
-        constexpr Color METAL_GREY = Color{172, 175, 182, 255};
-
-        // Door panels: a slightly darker turquoise than the body.
-        constexpr Color DOOR_TURQUOISE = Color{45, 155, 135, 255};
-
-        // Door-seam outline (the required wireframe-lines element): a dark teal
-        // that reads as a seam against the turquoise.
-        constexpr Color DOOR_SEAM_LINE = Color{20, 55, 48, 255};
-
-        // For front tire
-        constexpr Color TIRE_ORANGE = Color{250, 115, 40, 255};
-
-        // A point on the body's side silhouette, in the Y-Z plane (front = -Z).
         struct ProfilePt {
             float y;
             float z;
         };
 
-        // Body side profile: a "long hexagon" (top trapezoid + bottom trapezoid
-        // sharing the widest waistline edge). Listed CCW as seen from the -X
-        // side, so the extrusion below gets outward-facing windings for free.
-        //
-        //        P4 ___________ P3       <- roof (top, shortest in Z)
-        //         /             \
-        //     P5 |               | P2    <- waistline (widest in Z)
-        //         \             /
-        //        P0 ----------- P1        <- floor (bottom)
-        //   front (-Z)        back (+Z)
+        struct SidePt {
+            float y;
+            float z;
+        };
+
         constexpr ProfilePt BODY_PROFILE[] = {
-            {0.35f, -1.70f}, // P0 bottom-front
-            {0.35f, 1.85f},  // P1 bottom-back
-            {1.45f, 2.15f},  // P2 waist-back   (widest)
-            {2.45f, 1.55f},  // P3 top-back
-            {2.45f, -1.15f}, // P4 top-front
-            {1.45f, -1.95f}, // P5 waist-front  (widest)
+            {0.34f, -1.78f}, {0.34f, 1.92f}, {1.42f, 2.20f}, {2.50f, 1.60f}, {2.50f, -1.18f}, {1.46f, -2.02f},
         };
         constexpr int BODY_PROFILE_N = sizeof(BODY_PROFILE) / sizeof(BODY_PROFILE[0]);
-
-        // Half the body width along X (the extrusion runs -halfW .. +halfW).
-        constexpr float BODY_HALF_W = 1.05f;
-
-        // Door: a trapezoid (not a rectangle) — the front edge slants back as it
-        // rises, following the body. Same Y-Z profile convention as the body
-        // (CCW from -X); extruded as a thin slab laid on the side surface.
-        // 5 vertices: a rectangle (square) with a trapezoid on top. The back
-        // edge is straight/vertical; the front edge bends — vertical along the
-        // lower "square", then slanting back over the upper "trapezoid". The
-        // extra vertex (mid-front) is that bend on the front side.
-        constexpr ProfilePt DOOR_PROFILE[] = {
-            {0.50f, -1.50f}, // bottom-front
-            {0.50f, -0.50f}, // bottom-back
-            {2.30f, -0.50f}, // top-back   (back edge vertical)
-            {2.30f, -1.00f}, // top-front  (pulled back -> trapezoid top)
-            {1.50f, -1.50f}, // mid-front  (bend: square below, trapezoid above)
+        constexpr int BODY_CAP_TRIS[] = {
+            0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 5,
         };
-        constexpr int DOOR_PROFILE_N = sizeof(DOOR_PROFILE) / sizeof(DOOR_PROFILE[0]);
-        constexpr float DOOR_HALF_THICK = 0.04f; // slab thickness along X
+        constexpr int BODY_CAP_INDEX_COUNT = sizeof(BODY_CAP_TRIS) / sizeof(BODY_CAP_TRIS[0]);
 
-        // Signed area of edge (b - a) about point p, in the Z-Y plane. >0 / <0
-        // tell which side of edge ab the point p lies on.
-        float edgeSide(const ProfilePt &p, const ProfilePt &a, const ProfilePt &b) {
-            return (p.z - b.z) * (a.y - b.y) - (a.z - b.z) * (p.y - b.y);
+        constexpr SidePt FRONT_DOOR[] = {
+            {0.52f, -1.56f}, {0.52f, -0.62f}, {2.28f, -0.62f}, {2.28f, -1.04f}, {1.48f, -1.56f},
+        };
+
+        // Inset from the door silhouette, shaped like the actual door glass instead of a rectangle.
+        constexpr SidePt DOOR_WINDOW_FRAME[] = {
+            {1.36f, -1.44f}, {2.18f, -1.22f}, {2.18f, -0.76f}, {1.88f, -0.70f}, {1.36f, -0.92f},
+        };
+
+        constexpr SidePt DOOR_WINDOW_GLASS[] = {
+            {1.42f, -1.36f}, {2.10f, -1.18f}, {2.10f, -0.82f}, {1.84f, -0.77f}, {1.42f, -0.95f},
+        };
+
+        // Side graphic bands. These are procedural instead of a giant side decal so
+        // they stay correctly oriented and wrap more faithfully.
+        constexpr SidePt BELTLINE[] = {
+            {1.40f, -1.74f},
+            {1.48f, -1.74f},
+            {1.48f, 1.74f},
+            {1.40f, 1.74f},
+        };
+
+        constexpr SidePt YELLOW_WAVE[] = {
+            {0.90f, -1.72f}, {1.34f, -1.72f}, {1.26f, -0.80f}, {1.12f, 0.05f},  {1.22f, 1.10f},
+            {1.10f, 1.72f},  {0.86f, 1.72f},  {0.74f, 0.95f},  {0.84f, -0.20f},
+        };
+
+        constexpr SidePt BLUE_WAVE[] = {
+            {0.66f, -1.70f}, {1.00f, -1.70f}, {0.94f, -0.65f}, {0.86f, 0.25f},  {0.96f, 1.22f},
+            {0.88f, 1.72f},  {0.58f, 1.72f},  {0.46f, 1.00f},  {0.56f, -0.15f},
+        };
+
+        Texture2D g_windowTexture{};
+        Texture2D g_logoTexture{};
+        bool g_resourcesLoaded = false;
+
+        void drawFilledCircle(Image& image, int x, int y, int radius, Color color) {
+            ImageDrawCircle(&image, x, y, radius, color);
         }
 
-        bool pointInTri(const ProfilePt &p, const ProfilePt &a, const ProfilePt &b,
-                        const ProfilePt &c) {
-            const float d1 = edgeSide(p, a, b);
-            const float d2 = edgeSide(p, b, c);
-            const float d3 = edgeSide(p, c, a);
-            const bool hasNeg = (d1 < 0.0f) || (d2 < 0.0f) || (d3 < 0.0f);
-            const bool hasPos = (d1 > 0.0f) || (d2 > 0.0f) || (d3 > 0.0f);
-            return !(hasNeg && hasPos);
+        Texture2D makeWindowTexture() {
+            Image image = GenImageColor(96, 64, BLANK);
+
+            ImageDrawRectangle(&image, 0, 0, image.width, image.height, Color{125, 206, 245, 150});
+            ImageDrawRectangle(&image, 0, image.height / 2, image.width, image.height / 2, Color{70, 135, 192, 150});
+            ImageDrawRectangle(&image, 6, 6, image.width - 12, 8, GLASS_HILITE);
+            ImageDrawLine(&image, 12, 18, 84, 14, Color{240, 248, 255, 140});
+            ImageDrawLine(&image, 8, 42, 86, 28, Color{210, 240, 255, 90});
+            ImageDrawLine(&image, 0, 52, 48, 63, Color{48, 95, 145, 90});
+
+            Texture2D texture = LoadTextureFromImage(image);
+            SetTextureFilter(texture, TEXTURE_FILTER_POINT);
+            UnloadImage(image);
+            return texture;
         }
 
-        // Ear-clipping triangulation of a simple polygon (the Y-Z profile),
-        // handling concave shapes. Writes index triples into `tris` (capacity
-        // >= 3*(n-2)) preserving the polygon's winding; returns the index count.
-        int triangulate(const ProfilePt *p, int n, int *tris) {
-            if (n < 3) {
-                return 0;
-            }
-            // Polygon orientation (signed area, z as x-axis).
-            float area = 0.0f;
-            for (int i = 0; i < n; ++i) {
-                const ProfilePt &a = p[i];
-                const ProfilePt &b = p[(i + 1) % n];
-                area += a.z * b.y - b.z * a.y;
-            }
-            const bool ccw = area > 0.0f;
+        Image makeLogoImage() {
+            Image image = GenImageColor(256, 104, BLANK);
 
-            int idx[32];
-            for (int i = 0; i < n; ++i) {
-                idx[i] = i;
-            }
-            int m = n;
-            int t = 0;
-            int guard = 0;
-            while (m > 3 && guard++ < 256) {
-                bool clipped = false;
-                for (int i = 0; i < m; ++i) {
-                    const int i0 = idx[(i + m - 1) % m];
-                    const int i1 = idx[i];
-                    const int i2 = idx[(i + 1) % m];
-                    const ProfilePt &a = p[i0];
-                    const ProfilePt &b = p[i1];
-                    const ProfilePt &cc = p[i2];
-                    // Convex corner? (turn direction must match orientation.)
-                    const float cross = (b.z - a.z) * (cc.y - a.y) - (b.y - a.y) * (cc.z - a.z);
-                    const bool convex = ccw ? (cross > 0.0f) : (cross < 0.0f);
-                    if (!convex) {
-                        continue;
-                    }
-                    // Ear? (no other vertex falls inside triangle a-b-cc.)
-                    bool ear = true;
-                    for (int j = 0; j < m; ++j) {
-                        const int vj = idx[j];
-                        if (vj == i0 || vj == i1 || vj == i2) {
-                            continue;
-                        }
-                        if (pointInTri(p[vj], a, b, cc)) {
-                            ear = false;
-                            break;
-                        }
-                    }
-                    if (!ear) {
-                        continue;
-                    }
-                    tris[t++] = i0;
-                    tris[t++] = i1;
-                    tris[t++] = i2;
-                    for (int k = i; k < m - 1; ++k) {
-                        idx[k] = idx[k + 1];
-                    }
-                    --m;
-                    clipped = true;
-                    break;
-                }
-                if (!clipped) {
-                    break; // degenerate; bail rather than spin
-                }
-            }
-            if (m == 3) {
-                tris[t++] = idx[0];
-                tris[t++] = idx[1];
-                tris[t++] = idx[2];
-            }
-            return t;
+            const int cx = 32;
+            const int cy = 52;
+            drawFilledCircle(image, cx - 10, cy, 11, FLOWER_ORANGE);
+            drawFilledCircle(image, cx + 10, cy, 11, FLOWER_ORANGE);
+            drawFilledCircle(image, cx, cy - 10, 11, FLOWER_ORANGE);
+            drawFilledCircle(image, cx, cy + 10, 11, FLOWER_ORANGE);
+            drawFilledCircle(image, cx, cy, 9, FLOWER_RED);
+
+            ImageDrawText(&image, "THE", 70, 14, 18, Color{115, 44, 10, 255});
+            ImageDrawText(&image, "MYSTERY", 70, 36, 26, Color{115, 44, 10, 255});
+            ImageDrawText(&image, "MACHINE", 70, 68, 20, Color{115, 44, 10, 255});
+            return image;
         }
 
-        // Draw a solid whose side silhouette is `profile` (points in the Y-Z
-        // plane, ordered CCW as seen from -X), extruded along X over
-        // [-halfW, +halfW]. Filled, or wireframe edges when `wire` is true.
-        void drawExtrudedX(const ProfilePt *profile, int n, float halfW, Color c, bool wire) {
-            const float L = -halfW; // -X face
-            const float R = +halfW; // +X face
+        Texture2D makeLogoTexture() {
+            Image image = makeLogoImage();
+            Texture2D texture = LoadTextureFromImage(image);
+            SetTextureFilter(texture, TEXTURE_FILTER_POINT);
+            UnloadImage(image);
+            return texture;
+        }
+
+        void ensureResourcesLoaded() {
+            if (g_resourcesLoaded) {
+                return;
+            }
+
+            g_windowTexture = makeWindowTexture();
+            g_logoTexture = makeLogoTexture();
+            g_resourcesLoaded = true;
+        }
+
+        Vector3 sideNormal(const ProfilePt& a, const ProfilePt& b) {
+            const float dy = b.y - a.y;
+            const float dz = b.z - a.z;
+            const float length = std::sqrt(dy * dy + dz * dz);
+
+            if (length <= EPSILON) {
+                return {0.0f, 1.0f, 0.0f};
+            }
+
+            return {0.0f, -dz / length, dy / length};
+        }
+
+        void emitProfileVertex(float x, const ProfilePt& p) {
+            rlVertex3f(x, p.y, p.z);
+        }
+
+        void drawExtrudedX(const ProfilePt* profile, int n, float halfW, const int* capTris, int capIndexCount, Color c,
+                           bool wire) {
+            const float L = -halfW;
+            const float R = +halfW;
 
             if (wire) {
                 rlBegin(RL_LINES);
                 rlColor4ub(c.r, c.g, c.b, c.a);
+
                 for (int i = 0; i < n; ++i) {
-                    const ProfilePt &a = profile[i];
-                    const ProfilePt &b = profile[(i + 1) % n];
-                    // Silhouette edge on each side, plus the cross edge joining
-                    // the two sides at this vertex.
-                    rlVertex3f(L, a.y, a.z);
-                    rlVertex3f(L, b.y, b.z);
-                    rlVertex3f(R, a.y, a.z);
-                    rlVertex3f(R, b.y, b.z);
-                    rlVertex3f(L, a.y, a.z);
-                    rlVertex3f(R, a.y, a.z);
+                    const ProfilePt& a = profile[i];
+                    const ProfilePt& b = profile[(i + 1) % n];
+
+                    emitProfileVertex(L, a);
+                    emitProfileVertex(L, b);
+
+                    emitProfileVertex(R, a);
+                    emitProfileVertex(R, b);
+
+                    emitProfileVertex(L, a);
+                    emitProfileVertex(R, a);
+                }
+
+                rlEnd();
+                return;
+            }
+
+            rlBegin(RL_QUADS);
+            rlColor4ub(c.r, c.g, c.b, c.a);
+            for (int i = 0; i < n; ++i) {
+                const ProfilePt& a = profile[i];
+                const ProfilePt& b = profile[(i + 1) % n];
+                const Vector3 normal = sideNormal(a, b);
+
+                rlNormal3f(normal.x, normal.y, normal.z);
+                emitProfileVertex(L, a);
+                emitProfileVertex(R, a);
+                emitProfileVertex(R, b);
+                emitProfileVertex(L, b);
+            }
+            rlEnd();
+
+            rlBegin(RL_TRIANGLES);
+            rlColor4ub(c.r, c.g, c.b, c.a);
+            for (int i = 0; i < capIndexCount; i += 3) {
+                const ProfilePt& a = profile[capTris[i]];
+                const ProfilePt& b = profile[capTris[i + 1]];
+                const ProfilePt& d = profile[capTris[i + 2]];
+
+                rlNormal3f(-1.0f, 0.0f, 0.0f);
+                emitProfileVertex(L, a);
+                emitProfileVertex(L, b);
+                emitProfileVertex(L, d);
+
+                rlNormal3f(1.0f, 0.0f, 0.0f);
+                emitProfileVertex(R, a);
+                emitProfileVertex(R, d);
+                emitProfileVertex(R, b);
+            }
+            rlEnd();
+        }
+
+        void drawQuadOutline(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Color color) {
+            rlBegin(RL_LINES);
+            rlColor4ub(color.r, color.g, color.b, color.a);
+            rlVertex3f(a.x, a.y, a.z);
+            rlVertex3f(b.x, b.y, b.z);
+            rlVertex3f(b.x, b.y, b.z);
+            rlVertex3f(c.x, c.y, c.z);
+            rlVertex3f(c.x, c.y, c.z);
+            rlVertex3f(d.x, d.y, d.z);
+            rlVertex3f(d.x, d.y, d.z);
+            rlVertex3f(a.x, a.y, a.z);
+            rlEnd();
+        }
+
+        void drawSolidQuad(Vector3 normal, Vector3 a, Vector3 b, Vector3 c, Vector3 d, Color tint) {
+            rlBegin(RL_QUADS);
+            rlColor4ub(tint.r, tint.g, tint.b, tint.a);
+            rlNormal3f(normal.x, normal.y, normal.z);
+            rlVertex3f(a.x, a.y, a.z);
+            rlVertex3f(b.x, b.y, b.z);
+            rlVertex3f(c.x, c.y, c.z);
+            rlVertex3f(d.x, d.y, d.z);
+            rlEnd();
+        }
+
+        void beginAlphaTextured(Texture2D texture, Color tint, Vector3 normal) {
+            rlSetBlendMode(RL_BLEND_ALPHA);
+            rlEnableColorBlend();
+            rlSetTexture(texture.id);
+            rlBegin(RL_QUADS);
+            rlColor4ub(tint.r, tint.g, tint.b, tint.a);
+            rlNormal3f(normal.x, normal.y, normal.z);
+        }
+
+        void endAlphaTextured() {
+            rlEnd();
+            rlSetTexture(0);
+        }
+
+        void drawTexturedQuad(Texture2D texture, Vector3 normal, Vector3 a, Vector3 b, Vector3 c, Vector3 d, Color tint,
+                              bool flipU) {
+            beginAlphaTextured(texture, tint, normal);
+            const float u0 = flipU ? 1.0f : 0.0f;
+            const float u1 = flipU ? 0.0f : 1.0f;
+            rlTexCoord2f(u0, 1.0f);
+            rlVertex3f(a.x, a.y, a.z);
+            rlTexCoord2f(u0, 0.0f);
+            rlVertex3f(b.x, b.y, b.z);
+            rlTexCoord2f(u1, 0.0f);
+            rlVertex3f(c.x, c.y, c.z);
+            rlTexCoord2f(u1, 1.0f);
+            rlVertex3f(d.x, d.y, d.z);
+            endAlphaTextured();
+        }
+
+        void drawSideQuad(int sx, float xAbs, const SidePt& p0, const SidePt& p1, const SidePt& p2, const SidePt& p3,
+                          Color tint, bool wire) {
+            const float x = sx * xAbs;
+            const Vector3 normal{static_cast<float>(sx), 0.0f, 0.0f};
+            const Vector3 v0{x, p0.y, p0.z};
+            const Vector3 v1{x, p1.y, p1.z};
+            const Vector3 v2{x, p2.y, p2.z};
+            const Vector3 v3{x, p3.y, p3.z};
+
+            if (wire) {
+                if (sx > 0) {
+                    drawQuadOutline(v0, v1, v2, v3, tint);
+                } else {
+                    drawQuadOutline(v0, v3, v2, v1, tint);
+                }
+                return;
+            }
+
+            if (sx > 0) {
+                drawSolidQuad(normal, v0, v1, v2, v3, tint);
+            } else {
+                drawSolidQuad(normal, v0, v3, v2, v1, tint);
+            }
+        }
+
+        void drawSidePolygon(int sx, float xAbs, const SidePt* pts, int count, Color tint, bool wire) {
+            const float x = sx * xAbs;
+            const Vector3 normal{static_cast<float>(sx), 0.0f, 0.0f};
+
+            if (wire) {
+                rlBegin(RL_LINES);
+                rlColor4ub(tint.r, tint.g, tint.b, tint.a);
+                for (int i = 0; i < count; ++i) {
+                    const SidePt& a = pts[i];
+                    const SidePt& b = pts[(i + 1) % count];
+                    rlVertex3f(x, a.y, a.z);
+                    rlVertex3f(x, b.y, b.z);
                 }
                 rlEnd();
                 return;
             }
 
-            // Side faces: one quad per profile edge A->B, wound CCW (outward)
-            // as [A_left, A_right, B_right, B_left].
-            rlBegin(RL_QUADS);
-            rlColor4ub(c.r, c.g, c.b, c.a);
-            for (int i = 0; i < n; ++i) {
-                const ProfilePt &a = profile[i];
-                const ProfilePt &b = profile[(i + 1) % n];
-                rlVertex3f(L, a.y, a.z);
-                rlVertex3f(R, a.y, a.z);
-                rlVertex3f(R, b.y, b.z);
-                rlVertex3f(L, b.y, b.z);
-            }
-            rlEnd();
-
-            // End caps, triangulated (ear clipping, so concave profiles work).
-            // -X cap keeps the profile winding (outward -X); +X cap is reversed.
-            int tris[3 * 32];
-            const int tn = triangulate(profile, n, tris);
             rlBegin(RL_TRIANGLES);
-            rlColor4ub(c.r, c.g, c.b, c.a);
-            for (int i = 0; i < tn; i += 3) {
-                const ProfilePt &a = profile[tris[i]];
-                const ProfilePt &b = profile[tris[i + 1]];
-                const ProfilePt &d = profile[tris[i + 2]];
-                // -X cap (outward normal -X)
-                rlVertex3f(L, a.y, a.z);
-                rlVertex3f(L, b.y, b.z);
-                rlVertex3f(L, d.y, d.z);
-                // +X cap (outward normal +X) — reversed winding
-                rlVertex3f(R, a.y, a.z);
-                rlVertex3f(R, d.y, d.z);
-                rlVertex3f(R, b.y, b.z);
+            rlColor4ub(tint.r, tint.g, tint.b, tint.a);
+            for (int i = 1; i < count - 1; ++i) {
+                if (sx > 0) {
+                    rlNormal3f(normal.x, normal.y, normal.z);
+                    rlVertex3f(x, pts[0].y, pts[0].z);
+                    rlVertex3f(x, pts[i].y, pts[i].z);
+                    rlVertex3f(x, pts[i + 1].y, pts[i + 1].z);
+                } else {
+                    rlNormal3f(normal.x, normal.y, normal.z);
+                    rlVertex3f(x, pts[0].y, pts[0].z);
+                    rlVertex3f(x, pts[i + 1].y, pts[i + 1].z);
+                    rlVertex3f(x, pts[i].y, pts[i].z);
+                }
             }
             rlEnd();
         }
 
-        // Draw `profile` as a closed line loop on the plane x = px. Used for the
-        // door seam — always drawn as lines, regardless of the wireframe toggle.
-        void drawProfileOutline(const ProfilePt *profile, int n, float px, Color c) {
-            rlBegin(RL_LINES);
-            rlColor4ub(c.r, c.g, c.b, c.a);
-            for (int i = 0; i < n; ++i) {
-                const ProfilePt &a = profile[i];
-                const ProfilePt &b = profile[(i + 1) % n];
-                rlVertex3f(px, a.y, a.z);
-                rlVertex3f(px, b.y, b.z);
+        void drawSideLogo(int sx, bool wire) {
+            ensureResourcesLoaded();
+            const Texture2D logo = g_logoTexture;
+            const float x = sx * (BODY_HALF_W + SIDE_GRAPHIC_OFFSET);
+            const Vector3 normal{static_cast<float>(sx), 0.0f, 0.0f};
+            const Vector3 a{x, 0.92f, -0.10f};
+            const Vector3 b{x, 1.76f, -0.10f};
+            const Vector3 c{x, 1.76f, 1.50f};
+            const Vector3 d{x, 0.92f, 1.50f};
+
+            if (wire) {
+                if (sx > 0) {
+                    drawQuadOutline(a, b, c, d, WHITE);
+                } else {
+                    drawQuadOutline(a, d, c, b, WHITE);
+                }
+                return;
             }
-            rlEnd();
+
+            if (sx > 0) {
+                drawTexturedQuad(logo, normal, a, b, c, d, WHITE, false);
+            } else {
+                drawTexturedQuad(logo, normal, a, d, c, b, WHITE, true);
+            }
         }
 
-    } // namespace
+        void drawSideLogos(bool wire) {
+            for (int sx = -1; sx <= 1; sx += 2) {
+                drawSideLogo(sx, wire);
+            }
+        }
 
-    void drawChassis(bool wire) {
-        // One tapered solid: a hexagonal side profile extruded across X. The 6
-        // profile edges give the floor, the bent front pair (grille +
-        // windshield), the roof, and the bent back pair; the hexagon end-caps
-        // are the left/right body sides.
-        drawExtrudedX(BODY_PROFILE, BODY_PROFILE_N, BODY_HALF_W, BODY_TURQUOISE, wire);
-    }
+        void drawDoorSeams() {
+            for (int sx = -1; sx <= 1; sx += 2) {
+                const float x = sx * (BODY_HALF_W + SEAM_OFFSET);
+                rlBegin(RL_LINES);
+                rlColor4ub(SEAM_LINE.r, SEAM_LINE.g, SEAM_LINE.b, SEAM_LINE.a);
 
-    void drawWheel(bool wire) {
-        // Cylinder spanning the axle (X), placed by its two end-cap centers.
-        drawCylinder(Vector3{-TIRE_HALF_W, 0.0f, 0.0f}, Vector3{TIRE_HALF_W, 0.0f, 0.0f},
-                     TIRE_RADIUS, TIRE_BLACK, wire);
-    }
+                const int count = static_cast<int>(sizeof(FRONT_DOOR) / sizeof(FRONT_DOOR[0]));
+                for (int i = 0; i < count; ++i) {
+                    const SidePt& a = FRONT_DOOR[i];
+                    const SidePt& b = FRONT_DOOR[(i + 1) % count];
+                    rlVertex3f(x, a.y, a.z);
+                    rlVertex3f(x, b.y, b.z);
+                }
 
-    void drawLight(bool wire) {
-        // Headlight: a short cylinder bounded by disks, axis along Z (car-parts:
-        // r ~ 0.17, depth ~ 0.12). Yellow geometry only — no light source.
-        constexpr float r = 0.25f;
-        constexpr float halfDepth = 0.06f;
-        drawCylinder(Vector3{0.0f, 0.0f, -halfDepth}, Vector3{0.0f, 0.0f, halfDepth},
-                     r, YELLOW, wire);
-    }
+                // Sliding-door seam and rear body seam.
+                rlVertex3f(x, 0.58f, -0.12f);
+                rlVertex3f(x, 2.16f, -0.12f);
+                rlVertex3f(x, 0.58f, 0.96f);
+                rlVertex3f(x, 2.04f, 0.96f);
 
-    void drawCar(bool wire) {
-        rlPushMatrix();
-        // Re-center: car-parts.md puts the visual center at (0, 1.24, 0) with
-        // the wheels on the ground. Shift the whole model down so that center
-        // lands on the origin, where the trackball rotates.
-        rlTranslatef(0.0f, -1.24f, 0.0f);
+                // Handles.
+                rlVertex3f(x, 1.28f, -0.92f);
+                rlVertex3f(x, 1.28f, -0.68f);
+                rlVertex3f(x, 1.28f, 0.16f);
+                rlVertex3f(x, 1.28f, 0.42f);
+                rlEnd();
+            }
+        }
 
-        drawChassis(wire);
+        void drawWrappedTrim(bool wire) {
+            // Side beltline plus simplified front/rear continuation.
+            for (int sx = -1; sx <= 1; sx += 2) {
+                drawSidePolygon(sx, BODY_HALF_W + SIDE_GRAPHIC_OFFSET, BELTLINE,
+                                static_cast<int>(sizeof(BELTLINE) / sizeof(BELTLINE[0])), TRIM_ORANGE, wire);
+            }
 
-        // 4 tires (car-parts.md): x = +/-0.80, y = 0.33; front z = -0.90,
-        // rear z = +1.00. Model one wheel, place it at each corner.
-        // constexpr float WHEEL_X = 0.80f;
-        constexpr float WHEEL_X = 0.95f;
-        constexpr float WHEEL_Y = 0.33f;
-        constexpr float WHEEL_Z[] = {-0.90f, 1.00f}; // front, rear
-        for (int sx = -1; sx <= 1; sx += 2) {        // -1 = left, +1 = right
-            for (float wz : WHEEL_Z) {
+            // Front continuation on the slanted front face.
+            const float zTop = -1.62f;
+            const float zBottom = -1.70f;
+            const Vector3 fa{-0.92f, 1.40f, zBottom};
+            const Vector3 fb{-0.92f, 1.48f, zTop};
+            const Vector3 fc{0.92f, 1.48f, zTop};
+            const Vector3 fd{0.92f, 1.40f, zBottom};
+            if (wire) {
+                drawQuadOutline(fa, fb, fc, fd, TRIM_ORANGE);
+            } else {
+                drawSolidQuad(Vector3{0.0f, 0.62f, -0.78f}, fa, fb, fc, fd, TRIM_ORANGE);
+            }
+
+            const Vector3 ra{-0.92f, 1.40f, 2.04f};
+            const Vector3 rb{-0.92f, 1.48f, 2.04f};
+            const Vector3 rc{0.92f, 1.48f, 2.04f};
+            const Vector3 rd{0.92f, 1.40f, 2.04f};
+            if (wire) {
+                drawQuadOutline(ra, rb, rc, rd, TRIM_ORANGE);
+            } else {
+                drawSolidQuad(Vector3{0.0f, 0.0f, 1.0f}, ra, rb, rc, rd, TRIM_ORANGE);
+            }
+        }
+
+        void drawWaveGraphics(bool wire) {
+            for (int sx = -1; sx <= 1; sx += 2) {
+                drawSidePolygon(sx, BODY_HALF_W + SIDE_GRAPHIC_OFFSET, YELLOW_WAVE,
+                                static_cast<int>(sizeof(YELLOW_WAVE) / sizeof(YELLOW_WAVE[0])), TRIM_YELLOW, wire);
+                drawSidePolygon(sx, BODY_HALF_W + SIDE_GRAPHIC_OFFSET, BLUE_WAVE,
+                                static_cast<int>(sizeof(BLUE_WAVE) / sizeof(BLUE_WAVE[0])), TRIM_BLUE, wire);
+            }
+
+            // Small continuation hints on the front and back so the "equator" treatment wraps visually.
+            rlPushMatrix();
+            rlTranslatef(0.0f, 0.92f, -1.92f);
+            drawBox(Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.96f, 0.20f, 0.05f}, TRIM_YELLOW, wire);
+            rlPopMatrix();
+            rlPushMatrix();
+            rlTranslatef(0.0f, 0.68f, -1.94f);
+            drawBox(Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.96f, 0.16f, 0.05f}, TRIM_BLUE, wire);
+            rlPopMatrix();
+
+            rlPushMatrix();
+            rlTranslatef(0.0f, 0.92f, 2.02f);
+            drawBox(Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.88f, 0.20f, 0.05f}, TRIM_YELLOW, wire);
+            rlPopMatrix();
+            rlPushMatrix();
+            rlTranslatef(0.0f, 0.68f, 2.00f);
+            drawBox(Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.88f, 0.16f, 0.05f}, TRIM_BLUE, wire);
+            rlPopMatrix();
+        }
+
+        void drawFrontWindshield(bool wire) {
+            ensureResourcesLoaded();
+
+            constexpr Vector3 normal{0.0f, 0.62f, -0.78f};
+            const Vector3 fa{-0.76f, 2.26f, -1.29f};
+            const Vector3 fb{0.76f, 2.26f, -1.29f};
+            const Vector3 fc{0.66f, 1.50f, -1.93f};
+            const Vector3 fd{-0.66f, 1.50f, -1.93f};
+            const Vector3 ga{-0.68f, 2.18f, -1.31f};
+            const Vector3 gb{0.68f, 2.18f, -1.31f};
+            const Vector3 gc{0.58f, 1.56f, -1.86f};
+            const Vector3 gd{-0.58f, 1.56f, -1.86f};
+
+            if (wire) {
+                drawQuadOutline(fa, fb, fc, fd, GLASS_FRAME);
+                drawQuadOutline(ga, gb, gc, gd, GLASS_TINT);
+                return;
+            }
+
+            drawSolidQuad(normal, fa, fb, fc, fd, GLASS_FRAME);
+            drawTexturedQuad(g_windowTexture, normal, ga, gb, gc, gd, GLASS_TINT, false);
+        }
+
+        void drawDoorWindows(bool wire) {
+            ensureResourcesLoaded();
+            for (int sx = -1; sx <= 1; sx += 2) {
+                drawSidePolygon(sx, BODY_HALF_W + SIDE_FRAME_OFFSET, DOOR_WINDOW_FRAME,
+                                static_cast<int>(sizeof(DOOR_WINDOW_FRAME) / sizeof(DOOR_WINDOW_FRAME[0])), GLASS_FRAME,
+                                wire);
+
+                // Use the bounding quad of the shaped glass polygon as a texture carrier.
+                // The darker frame above makes it read as inset even though the model remains procedural.
+                const float x = sx * (BODY_HALF_W + SIDE_GLASS_OFFSET);
+                const Vector3 normal{static_cast<float>(sx), 0.0f, 0.0f};
+                const Vector3 a{x, DOOR_WINDOW_GLASS[0].y, DOOR_WINDOW_GLASS[0].z};
+                const Vector3 b{x, DOOR_WINDOW_GLASS[1].y, DOOR_WINDOW_GLASS[1].z};
+                const Vector3 c{x, DOOR_WINDOW_GLASS[2].y, DOOR_WINDOW_GLASS[2].z};
+                const Vector3 d{x, DOOR_WINDOW_GLASS[4].y, DOOR_WINDOW_GLASS[4].z};
+                if (wire) {
+                    if (sx > 0) {
+                        drawQuadOutline(a, b, c, d, GLASS_TINT);
+                    } else {
+                        drawQuadOutline(a, d, c, b, GLASS_TINT);
+                    }
+                } else if (sx > 0) {
+                    drawTexturedQuad(g_windowTexture, normal, a, b, c, d, GLASS_TINT, false);
+                } else {
+                    drawTexturedQuad(g_windowTexture, normal, a, d, c, b, GLASS_TINT, false);
+                }
+            }
+        }
+
+        void drawBumpers(bool wire) {
+            constexpr Vector3 FRONT_BUMPER = {2.16f, 0.32f, 0.24f};
+            constexpr Vector3 REAR_BUMPER = {2.10f, 0.30f, 0.22f};
+            constexpr float BUMPER_Y = 0.50f;
+
+            rlPushMatrix();
+            rlTranslatef(0.0f, BUMPER_Y, -1.90f);
+            drawBox(Vector3{0.0f, 0.0f, 0.0f}, FRONT_BUMPER, METAL_GREY, wire);
+            rlPopMatrix();
+
+            rlPushMatrix();
+            rlTranslatef(0.0f, BUMPER_Y, 2.02f);
+            drawBox(Vector3{0.0f, 0.0f, 0.0f}, REAR_BUMPER, METAL_GREY, wire);
+            rlPopMatrix();
+        }
+
+        void drawRoofBars(bool wire) {
+            // Only the two width-wise cross bars, matching the reference.
+            constexpr Vector3 CROSS_BAR = {1.70f, 0.10f, 0.10f};
+            constexpr float Y = 2.58f;
+            constexpr float Z_VALUES[] = {-0.18f, 0.92f};
+            for (float z: Z_VALUES) {
                 rlPushMatrix();
-                rlTranslatef(sx * WHEEL_X, WHEEL_Y, wz);
-                drawWheel(wire);
+                rlTranslatef(0.0f, Y, z);
+                drawBox(Vector3{0.0f, 0.0f, 0.0f}, CROSS_BAR, METAL_GREY, wire);
                 rlPopMatrix();
             }
         }
 
-        // 2 metal-grey roof boards: thin boxes spanning the roof width (X),
-        // sitting on the roof top (y = 2.45), spaced along Z. Model one, place
-        // it at each Z slot.
-        constexpr Vector3 BOARD_SIZE = {1.70f, 0.15f, 0.15f};
-        // constexpr Vector3 BOARD_SIZE = {1.70f, 0.08f, 0.20f};
-        constexpr float ROOF_TOP_Y = 2.45f;
-        constexpr float BOARD_Z[] = {-0.35f, 0.75f};
-        for (float bz : BOARD_Z) {
+        void drawFrontDetails(bool wire) {
             rlPushMatrix();
-            rlTranslatef(0.0f, ROOF_TOP_Y + BOARD_SIZE.y * 0.5f, bz);
-            drawBox(Vector3{0.0f, 0.0f, 0.0f}, BOARD_SIZE, METAL_GREY, wire);
+            rlTranslatef(0.0f, 0.98f, -1.97f);
+            drawBox(Vector3{0.0f, 0.0f, 0.0f}, Vector3{1.00f, 0.34f, 0.06f}, METAL_DARK, wire);
+            rlPopMatrix();
+
+            rlPushMatrix();
+            rlTranslatef(0.0f, 0.78f, -1.99f);
+            drawBox(Vector3{0.0f, 0.0f, 0.0f}, Vector3{0.62f, 0.16f, 0.04f}, Color{240, 241, 232, 255}, wire);
             rlPopMatrix();
         }
 
-        // 2 metal-grey bumpers: boxes spanning the width (X), low on the body,
-        // protruding at the front (-Z) and back (+Z). Model one, place at each
-        // end.
-        constexpr Vector3 BUMPER_SIZE = {2.25f, 0.50f, 0.30f};
-        // constexpr Vector3 BUMPER_SIZE = {2.05f, 0.22f, 0.30f};
-        constexpr float BUMPER_Y = 0.50f;
-        constexpr float BUMPER_Z[] = {-1.80f, 1.90f}; // front, back
-        for (float bz : BUMPER_Z) {
+        void drawLightsAndMarkers(bool wire) {
+            constexpr float LIGHT_X = 0.66f;
+            constexpr float LIGHT_Y = 1.02f;
+            constexpr float LIGHT_Z = -1.94f;
+            for (int sx = -1; sx <= 1; sx += 2) {
+                rlPushMatrix();
+                rlTranslatef(sx * LIGHT_X, LIGHT_Y, LIGHT_Z);
+                drawLight(wire);
+                rlPopMatrix();
+            }
+
+            constexpr Vector3 TAIL_SIZE = {0.28f, 0.20f, 0.08f};
+            constexpr float TAIL_X = 0.68f;
+            constexpr float TAIL_Y = 0.90f;
+            constexpr float TAIL_Z = 2.12f;
+            for (int sx = -1; sx <= 1; sx += 2) {
+                rlPushMatrix();
+                rlTranslatef(sx * TAIL_X, TAIL_Y, TAIL_Z);
+                drawBox(Vector3{0.0f, 0.0f, 0.0f}, TAIL_SIZE, TAIL_RED, wire);
+                rlPopMatrix();
+            }
+        }
+
+        void drawMirrors(bool wire) {
+            constexpr Vector3 MIRROR_SIZE = {0.20f, 0.28f, 0.08f};
+            constexpr Vector3 ARM_SIZE = {0.06f, 0.10f, 0.12f};
+            constexpr float MIRROR_X = BODY_HALF_W + 0.12f;
+            constexpr float MIRROR_Y = 1.52f;
+            constexpr float MIRROR_Z = -1.20f;
+            for (int sx = -1; sx <= 1; sx += 2) {
+                rlPushMatrix();
+                rlTranslatef(sx * MIRROR_X, MIRROR_Y, MIRROR_Z);
+                drawBox(Vector3{0.0f, 0.0f, 0.0f}, MIRROR_SIZE, BODY_TURQUOISE, wire);
+                rlPopMatrix();
+
+                rlPushMatrix();
+                rlTranslatef(sx * (BODY_HALF_W + 0.06f), MIRROR_Y - 0.08f, MIRROR_Z + 0.08f);
+                drawBox(Vector3{0.0f, 0.0f, 0.0f}, ARM_SIZE, METAL_DARK, wire);
+                rlPopMatrix();
+            }
+        }
+
+        void drawSpareWheel(bool wire) {
+            constexpr float SPARE_R = 0.44f;
+            constexpr float SPARE_DEPTH = 0.18f;
+
             rlPushMatrix();
-            rlTranslatef(0.0f, BUMPER_Y, bz);
-            drawBox(Vector3{0.0f, 0.0f, 0.0f}, BUMPER_SIZE, METAL_GREY, wire);
+            rlTranslatef(0.0f, 1.28f, -1.98f);
+            rlRotatef(-90.0f, 1.0f, 0.0f, 0.0f);
+            drawCylinder(Vector3{0.0f, 0.0f, 0.0f}, SPARE_R, SPARE_DEPTH, RUBBER_BLACK, wire, SPARE_SIDES);
+            drawCylinder(Vector3{0.0f, 0.01f, 0.0f}, SPARE_R * 0.58f, SPARE_DEPTH + 0.02f, HUBCAP_BLUE, wire,
+                         SPARE_SIDES);
             rlPopMatrix();
         }
 
-        // 2 doors on each side, toward the front. The darker-turquoise trapezoid
-        // panel is an embellishment (follows the P toggle like the body); the
-        // required door element is the seam *outline*, drawn as lines always.
-        // Profile extruded into a thin slab laid on the side (x = +/-BODY_HALF_W),
-        // modeled once and mirrored left/right.
-        constexpr float DOOR_SEAM_EPS = 0.01f; // nudge seam proud of the panel
-        for (int sx = -1; sx <= 1; sx += 2) {
-            rlPushMatrix();
-            rlTranslatef(sx * BODY_HALF_W, 0.0f, 0.0f);
-            drawExtrudedX(DOOR_PROFILE, DOOR_PROFILE_N, DOOR_HALF_THICK, DOOR_TURQUOISE, wire);
-            // Seam lines on the outer face (sign follows the side), always lines.
-            drawProfileOutline(DOOR_PROFILE, DOOR_PROFILE_N,
-                               sx * (DOOR_HALF_THICK + DOOR_SEAM_EPS), DOOR_SEAM_LINE);
-            rlPopMatrix();
+        void drawWheelSet(bool wire) {
+            constexpr float WHEEL_X = 0.96f;
+            constexpr float WHEEL_Y = 0.33f;
+            constexpr float WHEEL_Z[] = {-0.88f, 1.02f};
+            for (int sx = -1; sx <= 1; sx += 2) {
+                for (float wz: WHEEL_Z) {
+                    rlPushMatrix();
+                    rlTranslatef(sx * WHEEL_X, WHEEL_Y, wz);
+                    drawWheel(wire);
+                    rlPopMatrix();
+                }
+            }
         }
 
-        // 2 front lights (car-parts.md): cylinders bounded by disks, axis along
-        // Z, x = +/-0.40, just above the bumper and proud of the -Z face. Model
-        // one, mirror in X.
-        constexpr float LIGHT_X = 0.70f;
-        constexpr float LIGHT_Y = 1.05f;
-        constexpr float LIGHT_Z = -1.88f; // pokes out of the front surface
-        for (int sx = -1; sx <= 1; sx += 2) {
-            rlPushMatrix();
-            rlTranslatef(sx * LIGHT_X, LIGHT_Y, LIGHT_Z);
-            drawLight(wire);
-            rlPopMatrix();
+    } // namespace
+
+    void LoadCarResources() {
+        ensureResourcesLoaded();
+    }
+
+    void UnloadCarResources() {
+        if (!g_resourcesLoaded) {
+            return;
         }
 
-        // 2 rear tail lights: small yellow boxes just above the back bumper.
-        constexpr Vector3 TAIL_SIZE = {0.30f, 0.22f, 0.12f};
-        constexpr float TAIL_X = 0.65f;
-        constexpr float TAIL_Y = 0.85f;
-        constexpr float TAIL_Z = 2.00f; // pokes out of the +Z face
-        for (int sx = -1; sx <= 1; sx += 2) {
-            rlPushMatrix();
-            rlTranslatef(sx * TAIL_X, TAIL_Y, TAIL_Z);
-            drawBox(Vector3{0.0f, 0.0f, 0.0f}, TAIL_SIZE, YELLOW, wire);
-            rlPopMatrix();
+        if (g_windowTexture.id != 0) {
+            UnloadTexture(g_windowTexture);
+        }
+        if (g_logoTexture.id != 0) {
+            UnloadTexture(g_logoTexture);
         }
 
-        // Spare tire on the front: a dark cylinder, axis along Z, centered in X,
-        // poking out of the -Z face.
-        constexpr float SPARE_R = 0.45f;
-        constexpr float SPARE_Y = 1.25f;
-        drawCylinder(Vector3{0.0f, SPARE_Y, -1.85f}, Vector3{0.0f, SPARE_Y, -2.05f},
-                     SPARE_R, TIRE_ORANGE, wire);
+        g_windowTexture = {};
+        g_logoTexture = {};
+        g_resourcesLoaded = false;
+    }
 
-        // 2 side mirrors: small boxes sticking out from the body sides, up near
-        // the front. Model one, mirror left/right.
-        constexpr Vector3 MIRROR_SIZE = {0.40f, 0.25f, 0.10f};
-        constexpr float MIRROR_X = BODY_HALF_W + 0.10f; // outer face proud of body
-        constexpr float MIRROR_Y = 1.35f;
-        constexpr float MIRROR_Z = -1.30f;
-        for (int sx = -1; sx <= 1; sx += 2) {
-            rlPushMatrix();
-            rlTranslatef(sx * MIRROR_X, MIRROR_Y, MIRROR_Z);
-            drawBox(Vector3{0.0f, 0.0f, 0.0f}, MIRROR_SIZE, BODY_TURQUOISE, wire);
-            rlPopMatrix();
+    void drawChassis(bool wire) {
+        drawExtrudedX(BODY_PROFILE, BODY_PROFILE_N, BODY_HALF_W, BODY_CAP_TRIS, BODY_CAP_INDEX_COUNT, BODY_TURQUOISE,
+                      wire);
+    }
+
+    void drawWheel(bool wire) {
+        rlPushMatrix();
+        rlRotatef(-90.0f, 0.0f, 0.0f, 1.0f);
+        drawCylinder(Vector3{0.0f, 0.0f, 0.0f}, TIRE_RADIUS, TIRE_WIDTH, RUBBER_BLACK, wire, WHEEL_SIDES);
+        drawCylinder(Vector3{0.0f, -0.11f, 0.0f}, TIRE_RADIUS * 0.54f, 0.04f, HUBCAP_BLUE, wire, WHEEL_SIDES);
+        drawCylinder(Vector3{0.0f, 0.11f, 0.0f}, TIRE_RADIUS * 0.54f, 0.04f, HUBCAP_BLUE, wire, WHEEL_SIDES);
+        rlPopMatrix();
+    }
+
+    void drawLight(bool wire) {
+        constexpr float r = 0.23f;
+        constexpr float depth = 0.10f;
+
+        rlPushMatrix();
+        rlRotatef(90.0f, 1.0f, 0.0f, 0.0f);
+        drawCylinder(Vector3{0.0f, 0.0f, 0.0f}, r, depth, TRIM_YELLOW, wire, LIGHT_SIDES);
+        rlPopMatrix();
+    }
+
+    void drawCar(bool wire) {
+        ensureResourcesLoaded();
+
+        rlPushMatrix();
+        {
+            rlTranslatef(0.0f, -1.24f, 0.0f);
+
+            drawChassis(wire);
+            drawWrappedTrim(wire);
+            drawWaveGraphics(wire);
+            drawDoorSeams();
+            drawBumpers(wire);
+            drawRoofBars(wire);
+            drawFrontDetails(wire);
+            drawLightsAndMarkers(wire);
+            drawWheelSet(wire);
+            drawSpareWheel(wire);
+            drawMirrors(wire);
+            drawSideLogos(wire);
+
+            // Transparent-ish glass last.
+            drawFrontWindshield(wire);
+            drawDoorWindows(wire);
         }
-
         rlPopMatrix();
     }
 

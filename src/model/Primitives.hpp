@@ -2,9 +2,10 @@
 
 #include <raylib.h>
 
-// Small custom drawing helpers for things raylib has no single-call primitive
-// for. The car's solids (box, cylinder) now use raylib built-ins directly
-// (DrawCubeV / DrawCylinderEx).
+// Small custom drawing helpers for the car model. Boxes use raylib's cube
+// primitive directly; cylinders are emitted locally along +Y with normals so
+// they shade correctly under the lighting shader. Callers still use rlgl
+// matrices to place and rotate parts in the model hierarchy.
 namespace raylibgl::model {
 
     // XYZ axes drawn as three colored lines from the origin:
@@ -16,9 +17,10 @@ namespace raylibgl::model {
     // DrawCubeV / DrawCubeWiresV.
     void drawBox(Vector3 center, Vector3 size, Color color, bool wire);
 
-    // Cylinder between its two end-cap centers `start` and `end`, with the given
-    // `radius`. Filled, or wireframe when `wire` is true. `sides` sets how round
-    // it looks. Wraps raylib's DrawCylinderEx / DrawCylinderWiresEx.
-    void drawCylinder(Vector3 start, Vector3 end, float radius, Color color, bool wire, int sides = 16);
+    // Canonical low-poly cylinder centered at `center`, with its axis along local +Y.
+    // Callers rotate the current matrix before this call when the cylinder
+    // should point along X or Z. The filled path emits faceted normals for a
+    // blockier low-poly look.
+    void drawCylinder(Vector3 center, float radius, float height, Color color, bool wire, int sides = 12);
 
 } // namespace raylibgl::model

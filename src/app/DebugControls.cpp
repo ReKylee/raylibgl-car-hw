@@ -1,227 +1,308 @@
 #include "app/DebugControls.hpp"
 
+#include "app/TrackballCamera.hpp"
+
+#include "raygui.h"
+
+#include <algorithm>
+
 namespace raylibgl::app::debug {
     namespace {
 
-        //     constexpr float GAMMA_STEP = 0.1f;
-        //     constexpr float MIN_GAMMA = 0.5f;
-        //     constexpr float MAX_GAMMA = 4.0f;
-        //
-        //     constexpr int BASE_PANEL_MARGIN = 14;
-        //     constexpr int BASE_PANEL_TOP = 40;
-        //     constexpr int BASE_PANEL_WIDTH = 500;
-        //     constexpr int BASE_PANEL_PADDING = 14;
-        //
-        //     constexpr int BASE_FPS_LEFT = 10;
-        //     constexpr int BASE_FPS_TOP = 10;
-        //     constexpr int FPS_BACKING_WIDTH = 88;
-        //     constexpr int FPS_BACKING_HEIGHT = 26;
-        //
-        //     constexpr int BASE_HEADER_HEIGHT = 30;
-        //     constexpr int BASE_LINE_HEIGHT = 28;
-        //     constexpr int BASE_FONT_SIZE = 18;
-        //     constexpr int BASE_TITLE_FONT_SIZE = 18;
-        //     constexpr int BODY_LINES = 5;
-        //
-        //     constexpr float REFERENCE_SCREEN_HEIGHT = 1080.0f;
-        //     constexpr float MIN_UI_SCALE = 0.9f;
-        //     constexpr float MAX_UI_SCALE = 1.25f;
-        //     constexpr float SCALE_ROUNDING_OFFSET = 0.5f;
-        //
-        //     constexpr int PANEL_EXTRA_HEIGHT = 4;
-        //     constexpr int COMPACT_PANEL_WIDTH = 430;
-        //     constexpr int COMPACT_VALUE_COLUMN_OFFSET = 92;
-        //     constexpr int NORMAL_VALUE_COLUMN_OFFSET = 120;
-        //     constexpr int COMPACT_KEY_COLUMN_MARGIN = 70;
-        //     constexpr int NORMAL_KEY_COLUMN_MARGIN = 86;
-        //     constexpr int ACCENT_BAR_HEIGHT = 2;
-        //     constexpr int TITLE_TEXT_TOP = 6;
-        //
-        //     constexpr int TONE_MAP_ROW = 0;
-        //     constexpr int LIGHTS_ROW = 1;
-        //     constexpr int GAMMA_ROW = 2;
-        //     constexpr int CAMERA_ROW = 3;
-        //     constexpr int SYSTEM_ROW = 4;
-        //
-        //     constexpr Color BG_COLOR{6, 8, 12, 220};
-        //     constexpr Color HEADER_COLOR{28, 34, 48, 240};
-        //     constexpr Color BORDER_COLOR{255, 255, 255, 85};
-        //     constexpr Color ACCENT_COLOR{120, 170, 255, 235};
-        //
-        //     constexpr Color TITLE_COLOR{230, 235, 255, 255};
-        //     constexpr Color LABEL_COLOR{150, 160, 175, 255};
-        //     constexpr Color KEY_COLOR{125, 180, 255, 255};
-        //     constexpr Color HELP_COLOR{180, 185, 195, 255};
-        //     constexpr Color VALUE_COLOR{235, 238, 245, 255};
-        //
-        //     float UiScale(int screenHeight) {
-        //         const auto clamp = [](float value, float minValue, float maxValue) {
-        //             return value < minValue ? minValue : value > maxValue ? maxValue : value;
-        //         };
-        //
-        //         return clamp(static_cast<float>(screenHeight) / REFERENCE_SCREEN_HEIGHT, MIN_UI_SCALE, MAX_UI_SCALE);
-        //     }
-        //
-        //     int Scale(int value, float uiScale) {
-        //         return static_cast<int>(static_cast<float>(value) * uiScale + SCALE_ROUNDING_OFFSET);
-        //     }
-        //
-        //     const char *ToneMapModeName(ToneMapMode mode) {
-        //         switch (mode) {
-        //             case ToneMapMode::Raw:
-        //                 return "Raw";
-        //             case ToneMapMode::Aces:
-        //                 return "ACES";
-        //         }
-        //
-        //         return "Unknown";
-        //     }
-        //
-        //     const char *LightModeName(LightMode mode) {
-        //         switch (mode) {
-        //             case LightMode::All:
-        //                 return "All lights";
-        //             case LightMode::DirectionalOnly:
-        //                 return "Directional only";
-        //             case LightMode::SpotlightsOnly:
-        //                 return "Spotlights only";
-        //         }
-        //
-        //         return "Unknown";
-        //     }
-        //
-        //     ToneMapMode NextToneMapMode(ToneMapMode mode) {
-        //         return mode == ToneMapMode::Raw ? ToneMapMode::Aces : ToneMapMode::Raw;
-        //     }
-        //
-        //     LightMode NextLightMode(LightMode mode) {
-        //         switch (mode) {
-        //             case LightMode::All:
-        //                 return LightMode::DirectionalOnly;
-        //             case LightMode::DirectionalOnly:
-        //                 return LightMode::SpotlightsOnly;
-        //             case LightMode::SpotlightsOnly:
-        //                 return LightMode::All;
-        //         }
-        //
-        //         return LightMode::All;
-        //     }
-        //
-        //     void DrawFpsCounter(float uiScale) {
-        //         const int x = Scale(BASE_FPS_LEFT, uiScale);
-        //         const int y = Scale(BASE_FPS_TOP, uiScale);
-        //         const int width = Scale(FPS_BACKING_WIDTH, uiScale);
-        //         const int height = Scale(FPS_BACKING_HEIGHT, uiScale);
-        //
-        //         DrawRectangle(x, y, width, height, BG_COLOR);
-        //         DrawRectangleLines(x, y, width, height, BORDER_COLOR);
-        //         DrawFPS(x + 5, y + 5);
-        //     }
-        //
-        // } // namespace
-        //
-        // void Update(State &state) {
-        //     using std::max;
-        //     using std::min;
-        //
-        //     if (IsKeyPressed(KEY_F1)) {
-        //         state.overlayVisible = !state.overlayVisible;
-        //     }
-        //
-        //     if (IsKeyPressed(KEY_T)) {
-        //         state.toneMapMode = NextToneMapMode(state.toneMapMode);
-        //     }
-        //
-        //     if (IsKeyPressed(KEY_L)) {
-        //         state.lightMode = NextLightMode(state.lightMode);
-        //     }
-        //     if (IsKeyPressed(KEY_EQUAL) || IsKeyPressed(KEY_KP_ADD)) {
-        //         state.gamma = min(MAX_GAMMA, state.gamma + GAMMA_STEP);
-        //     }
-        //
-        //     if (IsKeyPressed(KEY_MINUS) || IsKeyPressed(KEY_KP_SUBTRACT)) {
-        //         state.gamma = max(MIN_GAMMA, state.gamma - GAMMA_STEP);
-        //     }
-        // }
-        //
-        // void DrawOverlay(const State &state) {
-        //     const int screenWidth = GetScreenWidth();
-        //     const int screenHeight = GetScreenHeight();
-        //     const float uiScale = UiScale(screenHeight);
-        //
-        //     DrawFpsCounter(uiScale);
-        //
-        //     if (!state.overlayVisible) {
-        //         return;
-        //     }
-        //
-        //     // Base dimensions are authored for 1080p and scaled within a narrow range so
-        //     // the overlay remains readable without taking over small windows.
-        //     const int margin = Scale(BASE_PANEL_MARGIN, uiScale);
-        //     const int panelX = margin;
-        //     const int panelY = Scale(BASE_PANEL_TOP, uiScale);
-        //     const int panelWidth = std::min(Scale(BASE_PANEL_WIDTH, uiScale), screenWidth - margin * 2);
-        //
-        //     const int padding = Scale(BASE_PANEL_PADDING, uiScale);
-        //     const int headerHeight = Scale(BASE_HEADER_HEIGHT, uiScale);
-        //     const int lineHeight = Scale(BASE_LINE_HEIGHT, uiScale);
-        //     const int fontSize = Scale(BASE_FONT_SIZE, uiScale);
-        //     const int titleFontSize = Scale(BASE_TITLE_FONT_SIZE, uiScale);
-        //
-        //     const int panelHeight =
-        //             padding * 2 + headerHeight + BODY_LINES * lineHeight + Scale(PANEL_EXTRA_HEIGHT, uiScale);
-        //
-        //     const bool compact = panelWidth < Scale(COMPACT_PANEL_WIDTH, uiScale);
-        //
-        //     // Column positions collapse on narrow windows while preserving the same row
-        //     // layout and shortcut alignment.
-        //     const int labelX = panelX + padding;
-        //     const int valueX = labelX + (compact ? Scale(COMPACT_VALUE_COLUMN_OFFSET, uiScale)
-        //                                          : Scale(NORMAL_VALUE_COLUMN_OFFSET, uiScale));
-        //     const int keyX =
-        //             panelX + panelWidth -
-        //             (compact ? Scale(COMPACT_KEY_COLUMN_MARGIN, uiScale) : Scale(NORMAL_KEY_COLUMN_MARGIN, uiScale));
-        //
-        //     const auto drawText = [fontSize](int x, int y, const char *text, Color color) {
-        //         DrawText(text, x, y, fontSize, color);
-        //     };
-        //
-        //     const auto drawRow = [&](int row, const char *label, const char *value, const char *key = nullptr,
-        //                              Color rowValueColor = VALUE_COLOR) {
-        //         const int y = panelY + headerHeight + padding + row * lineHeight;
-        //
-        //         drawText(labelX, y, label, LABEL_COLOR);
-        //         drawText(valueX, y, value, rowValueColor);
-        //
-        //         if (key != nullptr) {
-        //             drawText(keyX, y, key, KEY_COLOR);
-        //         }
-        //     };
-        //
-        //     DrawRectangle(panelX, panelY, panelWidth, panelHeight, BG_COLOR);
-        //     DrawRectangle(panelX, panelY, panelWidth, headerHeight, HEADER_COLOR);
-        //     DrawRectangleLines(panelX, panelY, panelWidth, panelHeight, BORDER_COLOR);
-        //     DrawRectangle(panelX, panelY, panelWidth, Scale(ACCENT_BAR_HEIGHT, uiScale), ACCENT_COLOR);
-        //
-        //     DrawText("DEBUG", labelX, panelY + Scale(TITLE_TEXT_TOP, uiScale), titleFontSize, TITLE_COLOR);
-        //
-        //     drawRow(TONE_MAP_ROW, "Tone map", ToneMapModeName(state.toneMapMode), "[T]");
-        //     drawRow(LIGHTS_ROW, "Lights", LightModeName(state.lightMode), "[L]");
-        //     drawRow(GAMMA_ROW, "Gamma", TextFormat("%.1f", state.gamma), "[+/-]");
-        //
-        //     drawRow(CAMERA_ROW, "Camera", compact ? "WASD + mouse" : "Mouse + WASD, Q/E, Shift", nullptr,
-        //     HELP_COLOR);
-        //
-        //     drawRow(SYSTEM_ROW, "System", compact ? "F1  Esc  F10" : "F1 overlay  Esc cursor  F10 exit", nullptr,
-        //             HELP_COLOR);
-        // }
-        //
-        // render::RenderDebugOptions ToRenderOptions(const State &state) {
-        //     return {
-        //             .toneMapMode = static_cast<int>(state.toneMapMode),
-        //             .lightMode = static_cast<int>(state.lightMode),
-        //             .gamma = state.gamma,
-        //     };
-        // }
+        constexpr int PANEL_WIDTH = 360;
+        constexpr int PANEL_HEIGHT = 430;
+        constexpr int PANEL_MARGIN = 14;
+        constexpr int ROW_HEIGHT = 28;
+        constexpr int HEADER_HEIGHT = 34;
+        constexpr int CHECK_SIZE = 18;
+        constexpr int BUTTON_HEIGHT = 26;
+
+        constexpr float REFERENCE_HEIGHT = 900.0f;
+        constexpr float MIN_SCALE = 0.85f;
+        constexpr float MAX_SCALE = 1.20f;
+
+        constexpr Color PANEL_BG{24, 25, 28, 230};
+        constexpr Color PANEL_HEADER{38, 39, 43, 245};
+        constexpr Color PANEL_BORDER{120, 125, 135, 150};
+        constexpr Color ACCENT{255, 150, 70, 255};
+        constexpr Color TEXT_MAIN{232, 232, 232, 255};
+        constexpr Color TEXT_MUTED{165, 170, 178, 255};
+        constexpr Color FPS_BG{18, 18, 20, 210};
+
+        bool styleReady = false;
+
+        float UiScale() {
+            const float raw = static_cast<float>(GetScreenHeight()) / REFERENCE_HEIGHT;
+            return std::clamp(raw, MIN_SCALE, MAX_SCALE);
+        }
+
+        float ScaleF(float value, float uiScale) {
+            return value * uiScale;
+        }
+
+        int ScaleI(int value, float uiScale) {
+            return static_cast<int>(static_cast<float>(value) * uiScale + 0.5f);
+        }
+
+        Rectangle PanelBounds() {
+            const float scale = UiScale();
+            const int margin = ScaleI(PANEL_MARGIN, scale);
+            const int width = std::min(ScaleI(PANEL_WIDTH, scale), GetScreenWidth() - margin * 2);
+            const int height = ScaleI(PANEL_HEIGHT, scale);
+
+            return Rectangle{
+                static_cast<float>(margin),
+                static_cast<float>(margin),
+                static_cast<float>(width),
+                static_cast<float>(height),
+            };
+        }
+
+        void ApplyGuiStyle() {
+            if (styleReady) {
+                return;
+            }
+
+            styleReady = true;
+
+            GuiSetStyle(DEFAULT, TEXT_SIZE, 17);
+            GuiSetStyle(DEFAULT, BORDER_WIDTH, 1);
+            GuiSetStyle(DEFAULT, TEXT_PADDING, 8);
+            GuiSetStyle(DEFAULT, BACKGROUND_COLOR, ColorToInt(PANEL_BG));
+
+            GuiSetStyle(DEFAULT, TEXT_COLOR_NORMAL, ColorToInt(TEXT_MAIN));
+            GuiSetStyle(DEFAULT, TEXT_COLOR_FOCUSED, ColorToInt(WHITE));
+            GuiSetStyle(DEFAULT, TEXT_COLOR_PRESSED, ColorToInt(WHITE));
+            GuiSetStyle(DEFAULT, TEXT_COLOR_DISABLED, ColorToInt(TEXT_MUTED));
+
+            GuiSetStyle(DEFAULT, BASE_COLOR_NORMAL, ColorToInt(Color{48, 50, 56, 255}));
+            GuiSetStyle(DEFAULT, BASE_COLOR_FOCUSED, ColorToInt(Color{68, 72, 82, 255}));
+            GuiSetStyle(DEFAULT, BASE_COLOR_PRESSED, ColorToInt(ACCENT));
+
+            GuiSetStyle(DEFAULT, BORDER_COLOR_NORMAL, ColorToInt(Color{95, 100, 112, 255}));
+            GuiSetStyle(DEFAULT, BORDER_COLOR_FOCUSED, ColorToInt(ACCENT));
+            GuiSetStyle(DEFAULT, BORDER_COLOR_PRESSED, ColorToInt(Color{255, 190, 120, 255}));
+        }
+
+        void DrawFpsPill() {
+            constexpr float x = 12.0f;
+            constexpr float y = 10.0f;
+            constexpr float width = 92.0f;
+            constexpr float height = 26.0f;
+
+            const Rectangle bounds{x, y, width, height};
+
+            DrawRectangleRounded(bounds, 0.25f, 8, FPS_BG);
+            DrawRectangleRoundedLines(bounds, 0.25f, 8, PANEL_BORDER);
+            DrawFPS(static_cast<int>(x) + 8, static_cast<int>(y) + 5);
+        }
+
+        void DrawShortcutLine(int x, int y, const char* key, const char* description) {
+            DrawText(key, x, y, 16, ACCENT);
+            DrawText(description, x + 56, y, 16, TEXT_MUTED);
+        }
+
+    } // namespace
+
+    void Update(State& state, camera::TrackballCamera& camera) {
+        if (IsKeyPressed(KEY_F1)) {
+            state.panelVisible = !state.panelVisible;
+        }
+
+        if (IsKeyPressed(KEY_P)) {
+            state.wireframe = !state.wireframe;
+        }
+
+        if (IsKeyPressed(KEY_A)) {
+            state.showAxes = !state.showAxes;
+        }
+
+        if (IsKeyPressed(KEY_L)) {
+            state.showLightMarkers = !state.showLightMarkers;
+        }
+
+        if (IsKeyPressed(KEY_G)) {
+            state.showGrid = !state.showGrid;
+        }
+
+        if (IsKeyPressed(KEY_X)) {
+            state.axesFollowModel = !state.axesFollowModel;
+        }
+
+        if (IsKeyPressed(KEY_O)) {
+            camera.ToggleProjection();
+        }
+
+        if (IsKeyPressed(KEY_R)) {
+            camera.ResetRotation();
+        }
     }
+
+    void DrawOverlay(State& state, camera::TrackballCamera& camera) {
+        ApplyGuiStyle();
+        DrawFpsPill();
+
+        if (!state.panelVisible) {
+            DrawText("F1 debug", 116, 15, 16, TEXT_MUTED);
+            return;
+        }
+
+        const float scale = UiScale();
+        const Rectangle panel = PanelBounds();
+
+        const int padding = ScaleI(14, scale);
+        const int rowHeight = ScaleI(ROW_HEIGHT, scale);
+        const int checkSize = ScaleI(CHECK_SIZE, scale);
+
+        DrawRectangleRounded(panel, 0.04f, 8, PANEL_BG);
+        DrawRectangleRoundedLines(panel, 0.04f, 8, PANEL_BORDER);
+
+        DrawRectangleRec(
+            Rectangle{
+                panel.x,
+                panel.y,
+                panel.width,
+                ScaleF(static_cast<float>(HEADER_HEIGHT), scale),
+            },
+            PANEL_HEADER);
+
+        DrawRectangleRec(
+            Rectangle{
+                panel.x,
+                panel.y,
+                panel.width,
+                2.0f,
+            },
+            ACCENT);
+
+        const int x = static_cast<int>(panel.x) + padding;
+        int y = static_cast<int>(panel.y) + ScaleI(9, scale);
+
+        DrawText("VIEWER DEBUG", x, y, ScaleI(18, scale), TEXT_MAIN);
+
+        const Rectangle closeButton{
+            panel.x + panel.width - ScaleF(30.0f, scale),
+            panel.y + ScaleF(6.0f, scale),
+            ScaleF(22.0f, scale),
+            ScaleF(22.0f, scale),
+        };
+
+        if (GuiButton(closeButton, "x")) {
+            state.panelVisible = false;
+        }
+
+        y = static_cast<int>(panel.y) + ScaleI(HEADER_HEIGHT + 14, scale);
+
+        DrawText("Scene", x, y, ScaleI(16, scale), TEXT_MAIN);
+        y += ScaleI(24, scale);
+
+        GuiCheckBox(
+            Rectangle{
+                static_cast<float>(x),
+                static_cast<float>(y),
+                static_cast<float>(checkSize),
+                static_cast<float>(checkSize),
+            },
+            "Wireframe polygons  [P]", &state.wireframe);
+
+        y += rowHeight;
+
+        GuiCheckBox(
+            Rectangle{
+                static_cast<float>(x),
+                static_cast<float>(y),
+                static_cast<float>(checkSize),
+                static_cast<float>(checkSize),
+            },
+            "XYZ axes  [A]", &state.showAxes);
+
+        y += rowHeight;
+
+        GuiCheckBox(
+            Rectangle{
+                static_cast<float>(x),
+                static_cast<float>(y),
+                static_cast<float>(checkSize),
+                static_cast<float>(checkSize),
+            },
+            "Axes rotate with model  [X]", &state.axesFollowModel);
+
+        y += rowHeight;
+
+        GuiCheckBox(
+            Rectangle{
+                static_cast<float>(x),
+                static_cast<float>(y),
+                static_cast<float>(checkSize),
+                static_cast<float>(checkSize),
+            },
+            "Floor grid  [G]", &state.showGrid);
+
+        y += rowHeight;
+
+        GuiCheckBox(
+            Rectangle{
+                static_cast<float>(x),
+                static_cast<float>(y),
+                static_cast<float>(checkSize),
+                static_cast<float>(checkSize),
+            },
+            "Light source markers  [L]", &state.showLightMarkers);
+
+        y += ScaleI(42, scale);
+
+        DrawText("Camera", x, y, ScaleI(16, scale), TEXT_MAIN);
+        y += ScaleI(24, scale);
+
+        const char* projection = camera.IsPerspective() ? "Projection: Perspective" : "Projection: Orthographic";
+        DrawText(projection, x, y, ScaleI(16, scale), TEXT_MUTED);
+        y += ScaleI(24, scale);
+
+        if (GuiButton(
+                Rectangle{
+                    static_cast<float>(x),
+                    static_cast<float>(y),
+                    ScaleF(142.0f, scale),
+                    ScaleF(static_cast<float>(BUTTON_HEIGHT), scale),
+                },
+                "Toggle [O]")) {
+            camera.ToggleProjection();
+        }
+
+        if (GuiButton(
+                Rectangle{
+                    static_cast<float>(x) + ScaleF(154.0f, scale),
+                    static_cast<float>(y),
+                    ScaleF(142.0f, scale),
+                    ScaleF(static_cast<float>(BUTTON_HEIGHT), scale),
+                },
+                "Reset [R]")) {
+            camera.ResetRotation();
+        }
+
+        y += ScaleI(52, scale);
+
+        DrawText("Controls", x, y, ScaleI(16, scale), TEXT_MAIN);
+        y += ScaleI(24, scale);
+
+        DrawShortcutLine(x, y, "Drag", "virtual trackball rotation");
+        y += ScaleI(22, scale);
+
+        DrawShortcutLine(x, y, "Wheel", "zoom by camera distance");
+        y += ScaleI(22, scale);
+
+        DrawShortcutLine(x, y, "F1", "show/hide this panel");
+        y += ScaleI(22, scale);
+
+        DrawShortcutLine(x, y, "F10", "exit");
+    }
+
+    bool WantsMouseCapture(const State& state) {
+        if (!state.panelVisible) {
+            return false;
+        }
+
+        return CheckCollisionPointRec(GetMousePosition(), PanelBounds());
+    }
+
 } // namespace raylibgl::app::debug
