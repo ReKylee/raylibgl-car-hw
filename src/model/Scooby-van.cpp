@@ -192,6 +192,7 @@ namespace raylibgl::model {
         constexpr float TIRE_RADIUS = 0.41f;
         constexpr float TIRE_WIDTH = 0.37f;
         constexpr int WHEEL_SIDES = 14;
+        constexpr float HUB_RADIUS = 0.26f;  // yellow logo disk inside the black tyre
 
         // Front logo emblem (a yellow disk with three orange sticks crossing inside).
         constexpr float LOGO_RADIUS = 0.30f;
@@ -201,26 +202,76 @@ namespace raylibgl::model {
         constexpr int LOGO_SIDES = 16;
 
         constexpr Color RUBBER_BLACK = Color{24, 29, 35, 255};
-        constexpr Color HUBCAP_BLUE = Color{88, 190, 224, 255};
         constexpr Color LOGO_YELLOW = Color{247, 225, 111, 255};
         constexpr Color LOGO_ORANGE = Color{214, 91, 47, 255};
         constexpr Color TAIL_RED = Color{206, 42, 40, 255};
+        constexpr Color GLASS_BLUE = Color{135, 206, 235, 255};
 
         // Two red rectangle tail-lights on the rear face, sitting just above the bumper.
         constexpr float TAIL_X = 0.66f;
         constexpr float TAIL_Y = -0.46f;
         constexpr float TAIL_Z = 2.02f;
 
-        // ---- Side decal (MysteryMachineBottomDecal.png), embedded as base64 ------------
+        // ---- Side decal (MysteryMachineSideDecal.png), embedded as base64 --------------
         const char SIDE_DECAL_PNG_B64[] =
-            "iVBORw0KGgoAAAANSUhEUgAAACAAAAAMBAMAAADxOqKKAAAAAXNSR0IArs4c6QAAAARnQU1BAACx"
-            "jwv8YQUAAAAhUExURRG3uBrQyABlZgB3eOrtcL1KJ8lSK9ZbL+/2mrgRF9AaHHuLahQAAAAJcEhZ"
-            "cwAADsMAAA7DAcdvqGQAAACWSURBVBjTVYvREYIwEESPpAFKYNACMiZDAWbRBkAKQIMFGI4K9Fqg"
-            "Bas0xPHDnbvdeztzVJSUVJS/TKbsodpA7WxOcmjHLZsOPhd7DJMh0nPEMRcKE4/WNjxjezG1cacQ"
-            "L7chXL2uNVXaQ54cAt8FzijyxsmLsxbx2hE8AjPyBDgQkK7H+bsJSETaDrHvB7RdAlrff1o/Quw1"
-            "MlAKa3MAAAAASUVORK5CYII=";
+            "iVBORw0KGgoAAAANSUhEUgAAANcAAACsCAMAAADfRsmFAAAAAXNSR0IArs4c6QAAAARnQU1BAACx"
+            "jwv8YQUAAAA8UExURf+qVf+qAP+qqqqqVdviOuLoZt/eOe+wJviYHefsgePQM/zbAPvDCPOlIvea"
+            "HfmlFu6vJfiZHODSMwAAADSFtqYAAAAUdFJOU/////////////////////////8AT0/nEQAAAAlw"
+            "SFlzAAAOwwAADsMBx2+oZAAAC5FJREFUeF7tm+l227gShBWPk7FvJstE7/+ucwD0Ul1ogBQXSb7H"
+            "9SMCGr19AglRtnO5fgxdvlRdyvByKS9qa2NWbn2USsuXy+WljBrIly9frterjctMjU/OdSkIf2Hr"
+            "1rxOcHZ5OJfVbw1BH2qwy4sV7JHrS58309lc3lXK1UadIkhGHwokuidXZ7iJi3btYVzegA46wwgr"
+            "4yLv0rcNEg3MB8i6Ugy/zXUlub6aiKv9G98FOT8G23VPLu9DR+LSC3uW+5G5VFxWdBqX7sWESzx6"
+            "8V7IWI24zaP+R/bdgrrSj7z4jSEuvRzBc+kx6gl1lmq4sFdS2HdOXmxtBVfxKs9McQ02jIu67sAV"
+            "2sJjI76aOCTMMD2WY53F1d1eoo6rGC70af2RuPrL0Lma3GHCJe7yST3WWVzeVMfVDzAkhjcLzooD"
+            "vEcjnc+lTbQXvN7MBUNiePk4p4/v+vzfliZ6Ai69tszuR2hbiFwuKNfpfC4deD+y4BYIaf3EC63z"
+            "F816n63tkdYecfm5aA22MUZjrifjspuBLib0CTAYjbn669GLJbqNC9P682h9hceCvoV+v2K20gVe"
+            "e75ikdW+4iAUbefy7w9amFaiODZmW8nFemGD6SauuAu8X766iWuwMuCyxYFu4sJq8kWxxpcZPsZe"
+            "X8CtKT7ldvn8Ku4LlZm2Wd87XB71P7KngnzaaTG3YsjV314pl9t8t7tCUF8vVVgd9T+yZ4rdzrh8"
+            "qMq53DjkwgbVZbCMGtkzQToDMTtQZ9+s8G2BmmazkFipTF40ovNVj0Q7uGSbei72bDboq8/pbwVa"
+            "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";
 
-        constexpr float DECAL_X = 1.075f;  // just outside the body shell (cube bbox x ~ 1.06)
+        constexpr float DECAL_X = 1.005f;  // flush on the side wall (x=1.00) so it can't float/clip
 
         Texture2D g_sideDecal{};
         bool g_resourcesLoaded = false;
@@ -273,6 +324,16 @@ namespace raylibgl::model {
             }
         }
 
+        // Light-blue window in the top half of each front door (left + right).
+        void drawDoorWindows(bool wire) {
+            for (int sx = -1; sx <= 1; sx += 2) {
+                rlPushMatrix();
+                rlTranslatef(sx * 1.0f, 0.42f, -0.82f);
+                drawBox(Vector3{0.0f, 0.0f, 0.0f}, Vector3{0.06f, 0.60f, 0.66f}, GLASS_BLUE, wire);
+                rlPopMatrix();
+            }
+        }
+
         // Two red rectangle tail-lights above the rear bumper (left + right).
         void drawTailLights(bool wire) {
             for (int sx = -1; sx <= 1; sx += 2) {
@@ -309,7 +370,7 @@ namespace raylibgl::model {
         // Left/right flame decal: the only textured geometry, mirrored across the two sides.
         void drawSideDecal(int sx, bool wire) {
             const float x = sx * DECAL_X;
-            const float y0 = -0.62f, y1 = 0.34f, z0 = -1.45f, z1 = 1.62f;
+            const float y0 = -0.42f, y1 = 0.50f, z0 = -0.20f, z1 = 1.40f;
             const Vector3 normal{static_cast<float>(sx), 0.0f, 0.0f};
             const Vector3 a{x, y0, z0};
             const Vector3 b{x, y1, z0};
@@ -328,7 +389,7 @@ namespace raylibgl::model {
                 return;
             }
 
-            const bool flipU = sx < 0;
+            const bool flipU = sx > 0;  // keep the text readable (not mirrored) on each side
             const float u0 = flipU ? 1.0f : 0.0f;
             const float u1 = flipU ? 0.0f : 1.0f;
             rlSetTexture(g_sideDecal.id);
@@ -361,15 +422,27 @@ namespace raylibgl::model {
         drawParts(HUB_R_PARTS, wire);
     }
 
-    // One road wheel at the local origin, axle along X: tyre cylinder + two hubcap disks.
+    // One road wheel at the local origin, axle along X. The black tyre is kept (it reads
+    // as the outline ring); each outer face carries the same emblem as the front logo --
+    // a yellow disk with three orange sticks crossing it.
     void drawWheel(bool wire) {
         rlPushMatrix();
-        rlRotatef(-90.0f, 0.0f, 0.0f, 1.0f);  // cylinder +Y axis -> +X
+        rlRotatef(-90.0f, 0.0f, 0.0f, 1.0f);  // cylinder +Y axis -> +X (axle); wheel plane = XZ
         drawCylinder(Vector3{0.0f, 0.0f, 0.0f}, TIRE_RADIUS, TIRE_WIDTH, RUBBER_BLACK, wire, WHEEL_SIDES);
-        drawCylinder(Vector3{0.0f, TIRE_WIDTH * 0.5f - 0.02f, 0.0f}, TIRE_RADIUS * 0.52f, 0.05f, HUBCAP_BLUE, wire,
-                     WHEEL_SIDES);
-        drawCylinder(Vector3{0.0f, -TIRE_WIDTH * 0.5f + 0.02f, 0.0f}, TIRE_RADIUS * 0.52f, 0.05f, HUBCAP_BLUE, wire,
-                     WHEEL_SIDES);
+
+        for (int s = -1; s <= 1; s += 2) {
+            const float face = s * TIRE_WIDTH * 0.5f;
+            // Yellow disk, straddling the tyre face so it sits proud of the black rim.
+            drawCylinder(Vector3{0.0f, face, 0.0f}, HUB_RADIUS, 0.06f, LOGO_YELLOW, wire, WHEEL_SIDES);
+            // Three orange sticks at 0/60/120 deg in the wheel plane, proud of the disk.
+            for (int k = 0; k < 3; ++k) {
+                rlPushMatrix();
+                rlTranslatef(0.0f, face + s * 0.04f, 0.0f);
+                rlRotatef(60.0f * k, 0.0f, 1.0f, 0.0f);  // about the axle
+                drawBox(Vector3{0.0f, 0.0f, 0.0f}, Vector3{2.0f * HUB_RADIUS * 0.9f, 0.05f, 0.06f}, LOGO_ORANGE, wire);
+                rlPopMatrix();
+            }
+        }
         rlPopMatrix();
     }
 
@@ -400,6 +473,7 @@ namespace raylibgl::model {
             drawWheels(wire);
             drawFrontLogo(wire);
             drawTailLights(wire);
+            drawDoorWindows(wire);
 
             // The one textured feature: the flame side decal, left + right.
             for (int sx = -1; sx <= 1; sx += 2) {
