@@ -15,6 +15,7 @@ namespace raylibgl::app::debug {
         bool axesFollowModel = false;
         bool wireframe = false;
         bool showLightMarkers = true;
+        bool exitRequested = false;
     };
 
     void Update(State &state, camera::TrackballCamera &camera);

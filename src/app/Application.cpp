@@ -150,7 +150,7 @@ void main()
     }
 
     void Application::run() {
-        while (!WindowShouldClose()) {
+        while (!WindowShouldClose() && !m_debugState.exitRequested) {
             update();
             render();
         }
