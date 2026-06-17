@@ -2,6 +2,8 @@
 
 #include "model/Primitives.hpp"
 
+#include <cmath>
+
 #include <rlgl.h>
 
 // =====================================================================================
@@ -11,12 +13,13 @@
 //  glTF (`source/scooby_do.gltf`). Do not hand-edit the data tables; re-run the generator.
 //
 //  The glTF body is 129 textured cuboids ("cube" mesh nodes), many rotated about X to
-//  fake the rounded van shell, in three bones: the main `bone`, plus the two front
-//  sub-assemblies `bone2` (left) and `dwerka` (right). Each cuboid is baked below as a
-//  Part = {world centre, local size, axis-angle rotation, flat material colour}; the
-//  colour is sampled from the original atlas so the materials match without ever binding
-//  the atlas at runtime. Every Part is drawn through the `drawBox` building block wrapped
-//  in real rlgl matrix ops (translate + rotate), preserving the source hierarchy.
+//  fake the rounded van shell. The CAR IS SPLIT FRONT/BACK: the BACK half (the cargo box)
+//  is rebuilt as ONE extruded-hull mesh (drawBackShell) instead of dozens of rectangles;
+//  the FRONT half is kept as detailed baked cuboids so the doors read as inset panels.
+//  The kept cuboids are grouped per car part (front fascia, doors, roof bars, and the two
+//  front hub sub-assemblies bone2/dwerka), each with its own array + draw function. Every
+//  Part = {centre, size, axis-angle rotation, flat colour}, drawn through the `drawBox`
+//  building block wrapped in rlgl matrix ops (translate + rotate).
 //
 //  The glTF's 97 "octagon" prisms (which faked the 4 wheels) are NOT baked: per the
 //  assignment the 4 road wheels are rebuilt as real cylinders (drawWheel), placed with
@@ -46,38 +49,12 @@ namespace raylibgl::model {
             unsigned char color[4];
         };
 
-        const Part BODY_PARTS[] = {
+        const Part FASCIA_PARTS[] = {
             {{0.0,-0.8673,-1.564}, {2.0,0.125,0.375}, {1.0,0.0,0.0,0.0}, {175,185,196,255}},
             {{0.0,-0.08434,-1.851}, {2.0,0.125,0.375}, {-1.0,0.0,0.0,85.0}, {28,181,186,255}},
             {{0.9375,0.5225,-1.61}, {0.125,0.125,1.0}, {-1.0,0.0,0.0,62.5}, {28,181,186,255}},
-            {{-0.9375,-0.4231,1.963}, {0.125,1.0,0.125}, {1.0,0.0,0.0,10.0}, {28,181,186,255}},
-            {{-0.9375,0.5363,1.871}, {0.125,1.062,0.125}, {-1.0,0.0,0.0,20.0}, {28,181,186,255}},
-            {{0.0,1.118,0.1836}, {2.0,0.125,2.062}, {-1.0,0.0,0.0,2.5}, {28,181,186,255}},
-            {{0.0,1.007,-1.116}, {2.0,0.125,0.625}, {-1.0,0.0,0.0,13.5}, {28,181,186,255}},
-            {{-9.628e-17,-0.799,1.973}, {2.125,0.375,0.25}, {6.123e-17,1.0,6.123e-17,180.0}, {175,185,196,255}},
             {{-0.9376,0.5225,-1.61}, {0.125,0.125,1.0}, {-1.0,0.0,0.0,62.5}, {28,181,186,255}},
-            {{0.0,1.081,1.461}, {2.0,0.5625,0.125}, {-1.0,0.0,0.0,72.5}, {28,181,186,255}},
             {{-0.7187,-0.5803,-1.402}, {0.5625,0.5625,0.125}, {1.0,0.0,0.0,7.5}, {28,181,186,255}},
-            {{-0.7187,-0.6115,-0.5265}, {0.5625,0.625,0.125}, {-1.0,0.0,0.0,17.5}, {28,181,186,255}},
-            {{-0.7188,-0.6115,1.411}, {0.5625,0.625,0.125}, {-1.0,0.0,0.0,20.0}, {28,181,186,255}},
-            {{-0.7811,-0.3615,0.9735}, {0.4375,0.125,0.75}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.9375,-0.4231,1.963}, {0.125,1.0,0.125}, {1.0,0.0,0.0,10.0}, {28,181,186,255}},
-            {{0.0,-0.6693,1.919}, {1.75,0.5,0.125}, {1.0,0.0,0.0,10.0}, {28,181,186,255}},
-            {{0.9375,0.5363,1.871}, {0.125,1.062,0.125}, {-1.0,0.0,0.0,20.0}, {28,181,186,255}},
-            {{-0.4361,0.5363,1.871}, {0.875,1.063,0.125}, {-1.0,0.0,0.0,20.0}, {28,181,186,255}},
-            {{0.4389,0.5363,1.871}, {0.875,1.063,0.125}, {-1.0,0.0,0.0,20.0}, {28,181,186,255}},
-            {{-0.4361,-0.1768,2.006}, {0.875,0.5,0.125}, {1.0,0.0,0.0,10.0}, {28,181,186,255}},
-            {{0.4389,-0.1768,2.006}, {0.875,0.5,0.125}, {1.0,0.0,0.0,10.0}, {28,181,186,255}},
-            {{-0.5,-0.7365,0.9579}, {0.125,0.375,0.9375}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.5,-0.7677,0.9735}, {0.125,0.3125,1.0}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.03125,-0.8615,0.9735}, {0.9375,0.125,1.0}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.03125,-0.8615,-0.9328}, {1.062,0.125,0.9375}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{-0.4688,-0.7052,-0.9328}, {0.0625,0.1875,0.9375}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.5,-0.4552,0.9735}, {0.125,0.3125,0.75}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{-0.5,-0.424,0.9735}, {0.125,0.25,0.75}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{-0.4688,-0.4552,-0.9953}, {0.0625,0.3125,0.8125}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.5312,-0.4552,-0.9953}, {0.0625,0.3125,0.8125}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.5312,-0.7052,-0.9328}, {0.0625,0.1875,0.9375}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
             {{0.7188,-0.4026,-1.845}, {0.1875,0.1875,0.125}, {-1.0,0.0,0.0,15.0}, {247,225,111,255}},
             {{0.7188,-0.2899,-1.907}, {0.3125,0.0625,0.1875}, {-1.0,0.0,0.0,15.0}, {175,185,196,255}},
             {{0.8438,-0.4489,-1.897}, {0.0625,0.25,0.125}, {-1.0,0.0,0.0,15.0}, {175,185,196,255}},
@@ -90,63 +67,45 @@ namespace raylibgl::model {
             {{-0.5938,-0.4489,-1.897}, {0.0625,0.25,0.125}, {-1.0,0.0,0.0,15.0}, {175,185,196,255}},
             {{-0.75,-0.5395,-1.873}, {0.25,0.0625,0.125}, {-1.0,0.0,0.0,15.0}, {175,185,196,255}},
             {{-0.7188,-0.2899,-1.907}, {0.3125,0.0625,0.1875}, {-1.0,0.0,0.0,15.0}, {175,185,196,255}},
-            {{-0.75,-0.3615,-0.964}, {0.5,0.125,0.75}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
             {{-0.9343,-0.4879,-1.45}, {0.125,0.625,0.0625}, {1.0,0.0,0.0,7.5}, {28,181,186,255}},
-            {{-0.9374,0.4059,0.9886}, {0.125,1.438,0.75}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{-0.9374,0.2497,1.395}, {0.125,1.75,0.0625}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{-0.9374,0.09344,1.614}, {0.125,1.938,0.25}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{-0.9374,0.1872,1.457}, {0.125,1.75,0.0625}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{-0.9374,-0.0003125,1.77}, {0.125,1.75,0.0625}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{-0.9374,-0.09406,1.832}, {0.125,1.562,0.0625}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{-0.9374,-0.03156,1.895}, {0.125,1.188,0.0625}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{-0.9374,-0.0003125,1.957}, {0.125,0.625,0.0625}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{-0.9371,0.2184,-0.5426}, {0.125,1.812,0.0625}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{-0.9374,1.013,-0.6899}, {0.125,0.125,0.25}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{-0.9374,1.013,-0.9711}, {0.125,0.125,0.3125}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
             {{0.0,0.4889,-1.666}, {1.75,6.258e-05,1.0}, {-1.0,0.0,0.0,62.5}, {135,206,235,255}},
             {{-6.229e-06,-0.5815,-1.78}, {2.0,0.6875,0.125}, {-1.0,0.0,0.0,15.0}, {28,181,186,255}},
-            {{0.0,-0.2053,-0.9015}, {1.625,0.1875,1.0}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.0,0.2097,-0.407}, {1.625,0.1875,1.0}, {1.0,0.0,0.0,100.0}, {28,181,186,255}},
-            {{0.0,0.2097,0.7805}, {1.625,0.1875,1.0}, {1.0,0.0,0.0,100.0}, {28,181,186,255}},
-            {{0.0,-0.2053,0.3485}, {1.625,0.1875,0.875}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.0,-0.549,1.411}, {0.875,0.5,0.125}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.03125,-0.549,-0.964}, {0.9375,0.5,1.0}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.0,-0.549,0.1922}, {1.625,0.5,0.5625}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{-0.8438,-0.1115,1.067}, {0.0625,0.375,0.5625}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.0,-0.8615,1.692}, {2.0,0.125,0.4375}, {1.0,0.0,0.0,0.0}, {175,185,196,255}},
             {{0.0,-0.8673,-1.564}, {2.0,0.125,0.375}, {1.0,0.0,0.0,0.0}, {175,185,196,255}},
             {{0.0,-0.799,-1.777}, {2.125,0.375,0.25}, {1.0,0.0,0.0,0.0}, {175,185,196,255}},
             {{-0.02653,-0.3409,-1.732}, {1.875,1.0,0.1875}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
             {{0.536,0.002802,-1.607}, {0.75,0.3125,0.0625}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{-0.7187,-0.6115,0.536}, {0.5625,0.625,0.125}, {1.0,0.0,0.0,20.0}, {28,181,186,255}},
-            {{-0.9374,0.2809,0.5511}, {0.125,1.688,0.125}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
+            {{0.03125,-0.7178,-1.914}, {0.8125,0.1875,6.247e-05}, {1.0,0.0,0.0,0.0}, {175,185,196,255}},
+            {{0.7187,-0.5803,-1.402}, {0.5625,0.5625,0.125}, {1.0,0.0,0.0,7.5}, {28,181,186,255}},
+        };
+
+        const Part DOOR_PARTS[] = {
+            {{0.0,1.007,-1.116}, {2.0,0.125,0.625}, {-1.0,0.0,0.0,13.5}, {28,181,186,255}},
+            {{-0.7187,-0.6115,-0.5265}, {0.5625,0.625,0.125}, {-1.0,0.0,0.0,17.5}, {28,181,186,255}},
+            {{0.03125,-0.8615,-0.9328}, {1.062,0.125,0.9375}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
+            {{-0.4688,-0.7052,-0.9328}, {0.0625,0.1875,0.9375}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
+            {{-0.4688,-0.4552,-0.9953}, {0.0625,0.3125,0.8125}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
+            {{0.5312,-0.4552,-0.9953}, {0.0625,0.3125,0.8125}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
+            {{0.5312,-0.7052,-0.9328}, {0.0625,0.1875,0.9375}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
+            {{-0.75,-0.3615,-0.964}, {0.5,0.125,0.75}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
+            {{-0.9371,0.2184,-0.5426}, {0.125,1.812,0.0625}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
+            {{-0.9374,1.013,-0.6899}, {0.125,0.125,0.25}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
+            {{-0.9374,1.013,-0.9711}, {0.125,0.125,0.3125}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
+            {{0.0,-0.2053,-0.9015}, {1.625,0.1875,1.0}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
+            {{0.0,0.2097,-0.407}, {1.625,0.1875,1.0}, {1.0,0.0,0.0,100.0}, {28,181,186,255}},
+            {{0.03125,-0.549,-0.964}, {0.9375,0.5,1.0}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
             {{-0.9373,0.1559,-0.01137}, {0.125,1.938,1.0}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.8438,-0.1115,1.067}, {0.0625,0.375,0.5625}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
             {{0.7187,-0.6115,-0.5265}, {0.5625,0.625,0.125}, {-1.0,0.0,0.0,17.5}, {28,181,186,255}},
             {{0.75,-0.3615,-0.964}, {0.5,0.125,0.75}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
             {{0.9373,0.1559,-0.01137}, {0.125,1.938,1.0}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.9374,0.4059,0.9886}, {0.125,1.438,0.75}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.9374,0.2809,0.5511}, {0.125,1.688,0.125}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.9374,0.09344,1.614}, {0.125,1.938,0.25}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.9374,-0.0003125,1.957}, {0.125,0.625,0.0625}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.9374,-0.03156,1.895}, {0.125,1.188,0.0625}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.9374,-0.09406,1.832}, {0.125,1.562,0.0625}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.9374,-0.0003125,1.77}, {0.125,1.75,0.0625}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.9374,0.1872,1.457}, {0.125,1.75,0.0625}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.9374,0.2497,1.395}, {0.125,1.75,0.0625}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.7187,-0.6115,0.536}, {0.5625,0.625,0.125}, {1.0,0.0,0.0,20.0}, {28,181,186,255}},
-            {{0.7811,-0.3615,0.9735}, {0.4375,0.125,0.75}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{0.7188,-0.6115,1.411}, {0.5625,0.625,0.125}, {-1.0,0.0,0.0,20.0}, {28,181,186,255}},
             {{0.9374,1.013,-0.9711}, {0.125,0.125,0.3125}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
             {{0.9374,1.013,-0.6899}, {0.125,0.125,0.25}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
             {{0.9371,0.2184,-0.5426}, {0.125,1.812,0.0625}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
+            {{-0.964,0.5028,-1.138}, {6.247e-05,0.8125,0.875}, {1.0,0.0,0.0,0.0}, {135,206,235,255}},
+        };
+
+        const Part ROOFBAR_PARTS[] = {
             {{0.0,1.198,-0.2869}, {2.0,0.125,0.125}, {1.0,0.0,0.0,0.0}, {175,185,196,255}},
             {{0.0,1.261,1.026}, {2.0,0.125,0.125}, {1.0,0.0,0.0,0.0}, {175,185,196,255}},
-            {{0.0,-0.8615,0.00475}, {2.0,0.125,0.9375}, {1.0,0.0,0.0,0.0}, {28,181,186,255}},
-            {{-0.964,0.5028,-1.138}, {6.247e-05,0.8125,0.875}, {1.0,0.0,0.0,0.0}, {135,206,235,255}},
-            {{0.03125,-0.7178,2.111}, {0.8125,0.1875,6.247e-05}, {1.0,0.0,0.0,0.0}, {175,185,196,255}},
-            {{0.03125,-0.7178,-1.914}, {0.8125,0.1875,6.247e-05}, {1.0,0.0,0.0,0.0}, {175,185,196,255}},
-            {{0.7187,-0.5803,-1.402}, {0.5625,0.5625,0.125}, {1.0,0.0,0.0,7.5}, {28,181,186,255}},
         };
 
         const Part HUB_L_PARTS[] = {
@@ -201,6 +160,8 @@ namespace raylibgl::model {
         constexpr float LOGO_Z = -1.98f;
         constexpr int LOGO_SIDES = 16;
 
+        constexpr Color BODY_TURQUOISE = Color{28, 181, 186, 255};
+        constexpr Color METAL_GREY = Color{175, 185, 196, 255};
         constexpr Color RUBBER_BLACK = Color{24, 29, 35, 255};
         constexpr Color LOGO_YELLOW = Color{247, 225, 111, 255};
         constexpr Color LOGO_ORANGE = Color{214, 91, 47, 255};
@@ -310,6 +271,106 @@ namespace raylibgl::model {
             drawParts(parts, N, wire);
         }
 
+        // ---- Back half of the body: ONE extruded-hull mesh (the cargo box) ------------
+        // A side silhouette (z,y) extruded across the width. The bottom edge has two
+        // wheel-arch notches cut into it (cf. the reference sketch) so the body wraps the
+        // wheels instead of cutting through them. Runs from z=-0.85 (filling the mid-roof)
+        // to the rear; the front half stays as detailed cubes.
+        struct ProfilePt {
+            float z, y;
+        };
+        constexpr float ARCH_Y = -0.35f;   // wheel-arch ceiling (clears wheel tops at -0.50)
+        constexpr float BACK_BOTTOM = -0.86f;
+        constexpr float BACK_HALF_W = 0.99f;  // just inside the x=1.0 front-cube walls
+
+        // Full outline (for the swept outer faces + wireframe), going around the silhouette
+        // with a notch over the front-wheel rear (z -0.85..-0.54) and the rear wheel
+        // (z 0.55..1.41).
+        // The rear wheel notch is a half-hexagon (angled sides up to a flat top), matching
+        // the front arch, rather than a plain rectangle.
+        constexpr ProfilePt BACK_OUTLINE[] = {
+            {-0.85f, ARCH_Y}, {-0.85f, 1.18f}, {1.55f, 1.18f}, {1.92f, 0.70f}, {1.95f, BACK_BOTTOM},
+            {1.42f, BACK_BOTTOM}, {1.22f, ARCH_Y}, {0.75f, ARCH_Y}, {0.55f, BACK_BOTTOM},
+            {-0.54f, BACK_BOTTOM}, {-0.54f, ARCH_Y},
+        };
+        constexpr int BACK_OUTLINE_N = 11;
+
+        // The filled side wall, split into 3 convex pieces: a top band above the arches,
+        // plus the sill between the wheels and the panel behind the rear wheel. The sill's
+        // and rear panel's notch-side edges are angled to form the half-hexagon arch.
+        constexpr ProfilePt BACK_TOP[] = {
+            {-0.85f, ARCH_Y}, {-0.85f, 1.18f}, {1.55f, 1.18f}, {1.92f, 0.70f}, {1.95f, ARCH_Y},
+        };
+        constexpr ProfilePt BACK_SILL[] = {
+            {-0.54f, BACK_BOTTOM}, {-0.54f, ARCH_Y}, {0.75f, ARCH_Y}, {0.55f, BACK_BOTTOM},
+        };
+        constexpr ProfilePt BACK_REAR[] = {
+            {1.42f, BACK_BOTTOM}, {1.22f, ARCH_Y}, {1.95f, ARCH_Y}, {1.95f, BACK_BOTTOM},
+        };
+
+        // Fan-triangulate one convex profile piece into both side walls (outward normals).
+        void emitSideFan(const ProfilePt* p, int n, float L, float R) {
+            for (int i = 1; i < n - 1; ++i) {
+                rlNormal3f(1.0f, 0.0f, 0.0f);  // right wall (+X)
+                rlVertex3f(R, p[0].y, p[0].z); rlVertex3f(R, p[i].y, p[i].z); rlVertex3f(R, p[i + 1].y, p[i + 1].z);
+                rlNormal3f(-1.0f, 0.0f, 0.0f);  // left wall (-X)
+                rlVertex3f(L, p[0].y, p[0].z); rlVertex3f(L, p[i + 1].y, p[i + 1].z); rlVertex3f(L, p[i].y, p[i].z);
+            }
+        }
+
+        void drawBackShell(bool wire) {
+            const Color col = BODY_TURQUOISE;
+            const float L = -BACK_HALF_W, R = BACK_HALF_W;
+
+            // Grey rear bumper (the front bumper comes from the front cubes).
+            drawBox(Vector3{0.0f, -0.75f, 1.96f}, Vector3{2.12f, 0.34f, 0.26f}, METAL_GREY, wire);
+
+            if (wire) {
+                rlBegin(RL_LINES);
+                rlColor4ub(col.r, col.g, col.b, col.a);
+                for (int i = 0; i < BACK_OUTLINE_N; ++i) {
+                    const ProfilePt& a = BACK_OUTLINE[i];
+                    const ProfilePt& b = BACK_OUTLINE[(i + 1) % BACK_OUTLINE_N];
+                    rlVertex3f(L, a.y, a.z); rlVertex3f(L, b.y, b.z);
+                    rlVertex3f(R, a.y, a.z); rlVertex3f(R, b.y, b.z);
+                    rlVertex3f(L, a.y, a.z); rlVertex3f(R, a.y, a.z);
+                }
+                rlEnd();
+                return;
+            }
+
+            // Side walls (3 convex pieces).
+            rlBegin(RL_TRIANGLES);
+            rlColor4ub(col.r, col.g, col.b, col.a);
+            emitSideFan(BACK_TOP, 5, L, R);
+            emitSideFan(BACK_SILL, 4, L, R);
+            emitSideFan(BACK_REAR, 4, L, R);
+            rlEnd();
+
+            // Swept outline edges = roof / rear / floor / front + the two arch interiors.
+            rlBegin(RL_QUADS);
+            rlColor4ub(col.r, col.g, col.b, col.a);
+            for (int i = 0; i < BACK_OUTLINE_N; ++i) {
+                const ProfilePt& a = BACK_OUTLINE[i];
+                const ProfilePt& b = BACK_OUTLINE[(i + 1) % BACK_OUTLINE_N];
+                const float dz = b.z - a.z, dy = b.y - a.y;
+                const float len = std::sqrt(dz * dz + dy * dy);
+                const float ny = (len > 0.0f) ? dz / len : 0.0f;
+                const float nz = (len > 0.0f) ? -dy / len : 0.0f;
+                rlNormal3f(0.0f, ny, nz);
+                rlVertex3f(L, a.y, a.z); rlVertex3f(L, b.y, b.z);
+                rlVertex3f(R, b.y, b.z); rlVertex3f(R, a.y, a.z);
+            }
+            rlEnd();
+        }
+
+        // ---- Front-half car parts (kept as detailed cubes) ----------------------------
+        void drawFrontFascia(bool wire) { drawParts(FASCIA_PARTS, wire); }    // grille, lights, windshield, front bumper
+        void drawDoors(bool wire) { drawParts(DOOR_PARTS, wire); }            // doors, door window, side panels, sills
+        void drawRoofBars(bool wire) { drawParts(ROOFBAR_PARTS, wire); }      // the two grey roof cross-bars
+        void drawHubLeft(bool wire) { drawParts(HUB_L_PARTS, wire); }       // glTF bone2 sub-assembly
+        void drawHubRight(bool wire) { drawParts(HUB_R_PARTS, wire); }      // glTF dwerka sub-assembly
+
         // Place the four road wheels with matrix transforms; geometry from drawWheel.
         void drawWheels(bool wire) {
             const float z[] = {FRONT_AXLE_Z, REAR_AXLE_Z};
@@ -404,11 +465,14 @@ namespace raylibgl::model {
 
     // ===== Public building blocks (declared in the header) =============================
 
-    // Chassis: the whole baked glTF body (main bone + the two front sub-assemblies).
+    // Chassis: the back half as one hull mesh, plus the front half as per-part cubes.
     void drawChassis(bool wire) {
-        drawParts(BODY_PARTS, wire);
-        drawParts(HUB_L_PARTS, wire);
-        drawParts(HUB_R_PARTS, wire);
+        drawBackShell(wire);
+        drawFrontFascia(wire);
+        drawDoors(wire);
+        drawHubLeft(wire);
+        drawHubRight(wire);
+        drawRoofBars(wire);
     }
 
     // One road wheel at the local origin, axle along X. The black tyre is kept (it reads
