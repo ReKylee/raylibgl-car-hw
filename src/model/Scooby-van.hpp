@@ -9,7 +9,6 @@ namespace raylibgl::model {
 
 	void drawChassis(bool wire);
 	void drawWheel(bool wire);
-	void drawLight(bool wire);
 	void drawCar(bool wire);
 
 } // namespace raylibgl::model
