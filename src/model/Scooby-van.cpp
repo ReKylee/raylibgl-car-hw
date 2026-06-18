@@ -64,9 +64,9 @@ namespace raylibgl::model {
         constexpr float HUB_RADIUS = 0.26f;  // yellow logo disk inside the black tyre
 
         // Front logo emblem (a yellow disk with three orange sticks crossing inside).
-        constexpr float LOGO_RADIUS = 0.30f;
+        constexpr float LOGO_RADIUS = 0.48f;   // big -- its bottom reaches just above the bumper
         constexpr float LOGO_DEPTH = 0.10f;
-        constexpr float LOGO_Y = 0.04f;
+        constexpr float LOGO_Y = -0.10f;
         constexpr float LOGO_Z = -1.98f;
         constexpr int LOGO_SIDES = 16;
 
@@ -190,34 +190,35 @@ namespace raylibgl::model {
         struct ProfilePt {
             float z, y;
         };
-        constexpr float ARCH_Y = -0.42f;       // wheel-arch ceiling
-        constexpr float BODY_BOTTOM = -0.92f;  // body bottom
+        // Proportions taken from commit 8b4fc0c ("Improved body").
+        constexpr float ARCH_Y = -0.35f;       // wheel-arch ceiling
+        constexpr float BODY_BOTTOM = -0.86f;  // body bottom
         constexpr float BODY_HALF_W = 0.99f;   // side-wall x
 
         // Full outline (swept outer faces + wireframe), CW from front-bottom: front face +
         // front clip, roof, rear clip + rear face, then the bottom with the rear wheel arch
-        // (z 0.49..1.45) and the front wheel arch (z -1.44..-0.48).
+        // (z 0.55..1.42) and the mirrored front wheel arch (z -1.42..-0.55).
         constexpr ProfilePt BODY_OUTLINE[] = {
-            {-1.95f, BODY_BOTTOM}, {-1.95f, 0.70f}, {-1.55f, 1.18f},
+            {-1.95f, BODY_BOTTOM}, {-1.95f, 0.40f}, {-1.55f, 1.18f},
             {1.55f, 1.18f}, {1.92f, 0.70f}, {1.95f, BODY_BOTTOM},
-            {1.45f, BODY_BOTTOM}, {1.29f, ARCH_Y}, {0.65f, ARCH_Y}, {0.49f, BODY_BOTTOM},
-            {-0.48f, BODY_BOTTOM}, {-0.64f, ARCH_Y}, {-1.28f, ARCH_Y}, {-1.44f, BODY_BOTTOM},
+            {1.42f, BODY_BOTTOM}, {1.22f, ARCH_Y}, {0.75f, ARCH_Y}, {0.55f, BODY_BOTTOM},
+            {-0.55f, BODY_BOTTOM}, {-0.75f, ARCH_Y}, {-1.22f, ARCH_Y}, {-1.42f, BODY_BOTTOM},
         };
         constexpr int BODY_OUTLINE_N = 14;
 
         // Filled side wall as 4 convex pieces: the upper band (above the arches), plus the
         // lower body in front of the front wheel, between the wheels, and behind the rear.
         constexpr ProfilePt BODY_TOP[] = {
-            {-1.95f, ARCH_Y}, {-1.95f, 0.70f}, {-1.55f, 1.18f}, {1.55f, 1.18f}, {1.92f, 0.70f}, {1.95f, ARCH_Y},
+            {-1.95f, ARCH_Y}, {-1.95f, 0.40f}, {-1.55f, 1.18f}, {1.55f, 1.18f}, {1.92f, 0.70f}, {1.95f, ARCH_Y},
         };
         constexpr ProfilePt BODY_FRONT_LOWER[] = {
-            {-1.95f, BODY_BOTTOM}, {-1.95f, ARCH_Y}, {-1.28f, ARCH_Y}, {-1.44f, BODY_BOTTOM},
+            {-1.95f, BODY_BOTTOM}, {-1.95f, ARCH_Y}, {-1.22f, ARCH_Y}, {-1.42f, BODY_BOTTOM},
         };
         constexpr ProfilePt BODY_SILL[] = {
-            {-0.48f, BODY_BOTTOM}, {-0.64f, ARCH_Y}, {0.65f, ARCH_Y}, {0.49f, BODY_BOTTOM},
+            {-0.55f, BODY_BOTTOM}, {-0.75f, ARCH_Y}, {0.75f, ARCH_Y}, {0.55f, BODY_BOTTOM},
         };
         constexpr ProfilePt BODY_REAR_LOWER[] = {
-            {1.45f, BODY_BOTTOM}, {1.29f, ARCH_Y}, {1.95f, ARCH_Y}, {1.95f, BODY_BOTTOM},
+            {1.42f, BODY_BOTTOM}, {1.22f, ARCH_Y}, {1.95f, ARCH_Y}, {1.95f, BODY_BOTTOM},
         };
 
         // Fan-triangulate one convex profile piece into both side walls (outward normals).
@@ -262,9 +263,12 @@ namespace raylibgl::model {
             rlEnd();
 
             // Swept outline edges = front/roof/rear/floor faces + the two wheel-arch interiors.
+            // Edge 1 (front-top rake, outline[1]->[2]) is SKIPPED: it is the windshield
+            // opening, drawn as a frame + recessed glass by drawWindshield instead.
             rlBegin(RL_QUADS);
             rlColor4ub(col.r, col.g, col.b, col.a);
             for (int i = 0; i < BODY_OUTLINE_N; ++i) {
+                if (i == 1) continue;  // front rake = windshield frame (see drawWindshield)
                 const ProfilePt& a = BODY_OUTLINE[i];
                 const ProfilePt& b = BODY_OUTLINE[(i + 1) % BODY_OUTLINE_N];
                 const float dz = b.z - a.z, dy = b.y - a.y;
@@ -299,21 +303,52 @@ namespace raylibgl::model {
             rlEnd();
         }
 
-        // Light-blue windshield: a raked glass panel proud of the front-top (corners wound
-        // bottom-left, top-left, top-right, bottom-right so it faces front-up).
+        // Windshield: the body's raked front-top (roof front -> just above the emblem) IS the
+        // frame. That rake (the hull edge skipped in drawBodyShell) is drawn here as a body-
+        // colour border around a rectangular opening, with ONE glass rectangle rotated to the
+        // rake angle and recessed inside it; reveal walls close the inset depth.
         void drawWindshield(bool wire) {
-            const float xw = 0.72f;
-            const Vector3 nrm{0.0f, 0.45f, -0.89f};
-            const Vector3 a{-xw, 0.40f, -1.97f}, b{-xw, 1.04f, -1.66f}, c{xw, 1.04f, -1.66f}, d{xw, 0.40f, -1.97f};
-            quad3(a, b, c, d, nrm, GLASS_BLUE, wire);
+            const Color body = BODY_TURQUOISE, glass = GLASS_BLUE;
+            const Vector3 N{0.0f, 0.456f, -0.89f};  // rake outward normal (front-up)
+            // Point on the rake surface at along-rake fraction t (0=emblem top, 1=roof) and width x.
+            auto P = [](float t, float x) {
+                return Vector3{x, 0.40f + 0.78f * t, -1.95f + 0.40f * t};
+            };
+            const float W = BODY_HALF_W;          // frame outer half-width (meets the side walls)
+            const float xw = 0.74f;               // window half-width
+            const float tb = 0.12f, tt = 0.88f;   // window bottom / top along the rake
+            const Vector3 r{0.0f, -0.0274f, 0.0534f};  // recess offset = -N * 0.06
+            auto G = [&](float t, float x) { Vector3 p = P(t, x); return Vector3{p.x, p.y + r.y, p.z + r.z}; };
+
+            // Frame border (body colour) on the rake surface; wound BL,TL,TR,BR -> normal N.
+            quad3(P(0, -W), P(tb, -W), P(tb, W), P(0, W), N, body, wire);          // bottom rail
+            quad3(P(tt, -W), P(1, -W), P(1, W), P(tt, W), N, body, wire);          // top rail (roofline)
+            quad3(P(tb, -W), P(tt, -W), P(tt, -xw), P(tb, -xw), N, body, wire);    // left pillar
+            quad3(P(tb, xw), P(tt, xw), P(tt, W), P(tb, W), N, body, wire);        // right pillar
+
+            // ONE glass rectangle, recessed along -N (rotated to the rake angle).
+            quad3(G(tb, -xw), G(tt, -xw), G(tt, xw), G(tb, xw), N, glass, wire);
+
+            // Reveal walls closing the gap between the frame opening and the recessed glass.
+            quad3(P(tb, -xw), G(tb, -xw), G(tb, xw), P(tb, xw), Vector3{0.0f, 1.0f, 0.0f}, body, wire);   // bottom
+            quad3(P(tt, xw), G(tt, xw), G(tt, -xw), P(tt, -xw), Vector3{0.0f, -1.0f, 0.0f}, body, wire);  // top
+            quad3(P(tt, -xw), G(tt, -xw), G(tb, -xw), P(tb, -xw), Vector3{1.0f, 0.0f, 0.0f}, body, wire); // left
+            quad3(P(tb, xw), G(tb, xw), G(tt, xw), P(tt, xw), Vector3{-1.0f, 0.0f, 0.0f}, body, wire);    // right
         }
 
-        // Two yellow front headlights (mirroring the red rear tail-lights).
+        // Two front headlights, right above the bumper: a yellow lens RECESSED inside a
+        // proud grey frame (4 bars), so the lens reads as inset -- built like image 1.
         void drawHeadlights(bool wire) {
             for (int sx = -1; sx <= 1; sx += 2) {
                 rlPushMatrix();
-                rlTranslatef(sx * 0.60f, -0.20f, -1.96f);
-                drawBox(Vector3{0.0f, 0.0f, 0.0f}, Vector3{0.30f, 0.22f, 0.12f}, LOGO_YELLOW, wire);
+                rlTranslatef(sx * 0.66f, -0.46f, -1.95f);  // flanking the logo, just above the bumper
+                // recessed yellow lens (proud of the body, but set back from the frame)
+                drawBox(Vector3{0.0f, 0.0f, -0.03f}, Vector3{0.30f, 0.20f, 0.04f}, LOGO_YELLOW, wire);
+                // proud grey frame around it
+                drawBox(Vector3{0.0f, 0.13f, -0.05f}, Vector3{0.42f, 0.06f, 0.10f}, METAL_GREY, wire);   // top
+                drawBox(Vector3{0.0f, -0.13f, -0.05f}, Vector3{0.42f, 0.06f, 0.10f}, METAL_GREY, wire);  // bottom
+                drawBox(Vector3{-0.18f, 0.0f, -0.05f}, Vector3{0.06f, 0.32f, 0.10f}, METAL_GREY, wire);  // left
+                drawBox(Vector3{0.18f, 0.0f, -0.05f}, Vector3{0.06f, 0.32f, 0.10f}, METAL_GREY, wire);   // right
                 rlPopMatrix();
             }
         }
