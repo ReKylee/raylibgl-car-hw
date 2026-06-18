@@ -261,6 +261,12 @@ namespace raylibgl::model {
                 return;
             }
 
+            // Disable back-face culling for the chassis hull so its interior is visible through
+            // the semi-transparent windshield. Culling is applied per batch at draw time, so
+            // flush around the state change, then restore culling for the rest of the model.
+            rlDrawRenderBatchActive();
+            rlDisableBackfaceCulling();
+
             // Side walls (4 convex pieces).
             rlBegin(RL_TRIANGLES);
             rlColor4ub(col.r, col.g, col.b, col.a);
@@ -288,6 +294,9 @@ namespace raylibgl::model {
                 rlVertex3f(R, b.y, b.z); rlVertex3f(R, a.y, a.z);
             }
             rlEnd();
+
+            rlDrawRenderBatchActive();
+            rlEnableBackfaceCulling();
         }
 
         // A general quad (filled or wire) with an explicit outward normal.
