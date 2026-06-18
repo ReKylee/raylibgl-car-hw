@@ -64,9 +64,9 @@ namespace raylibgl::model {
         constexpr float HUB_RADIUS = 0.26f;  // yellow logo disk inside the black tyre
 
         // Front logo emblem (a yellow disk with three orange sticks crossing inside).
-        constexpr float LOGO_RADIUS = 0.48f;   // big -- its bottom reaches just above the bumper
+        constexpr float LOGO_RADIUS = 0.40f;   // anchored bottom (~y-0.58) on the bumper; top at y0.22
         constexpr float LOGO_DEPTH = 0.10f;
-        constexpr float LOGO_Y = -0.10f;
+        constexpr float LOGO_Y = -0.18f;
         constexpr float LOGO_Z = -1.98f;
         constexpr int LOGO_SIDES = 16;
 
@@ -199,7 +199,7 @@ namespace raylibgl::model {
         // front clip, roof, rear clip + rear face, then the bottom with the rear wheel arch
         // (z 0.55..1.42) and the mirrored front wheel arch (z -1.42..-0.55).
         constexpr ProfilePt BODY_OUTLINE[] = {
-            {-1.95f, BODY_BOTTOM}, {-1.95f, 0.40f}, {-1.55f, 1.18f},
+            {-1.95f, BODY_BOTTOM}, {-1.95f, 0.24f}, {-1.55f, 1.18f},
             {1.55f, 1.18f}, {1.92f, 0.70f}, {1.95f, BODY_BOTTOM},
             {1.42f, BODY_BOTTOM}, {1.22f, ARCH_Y}, {0.75f, ARCH_Y}, {0.55f, BODY_BOTTOM},
             {-0.55f, BODY_BOTTOM}, {-0.75f, ARCH_Y}, {-1.22f, ARCH_Y}, {-1.42f, BODY_BOTTOM},
@@ -209,7 +209,7 @@ namespace raylibgl::model {
         // Filled side wall as 4 convex pieces: the upper band (above the arches), plus the
         // lower body in front of the front wheel, between the wheels, and behind the rear.
         constexpr ProfilePt BODY_TOP[] = {
-            {-1.95f, ARCH_Y}, {-1.95f, 0.40f}, {-1.55f, 1.18f}, {1.55f, 1.18f}, {1.92f, 0.70f}, {1.95f, ARCH_Y},
+            {-1.95f, ARCH_Y}, {-1.95f, 0.24f}, {-1.55f, 1.18f}, {1.55f, 1.18f}, {1.92f, 0.70f}, {1.95f, ARCH_Y},
         };
         constexpr ProfilePt BODY_FRONT_LOWER[] = {
             {-1.95f, BODY_BOTTOM}, {-1.95f, ARCH_Y}, {-1.22f, ARCH_Y}, {-1.42f, BODY_BOTTOM},
@@ -309,15 +309,15 @@ namespace raylibgl::model {
         // rake angle and recessed inside it; reveal walls close the inset depth.
         void drawWindshield(bool wire) {
             const Color body = BODY_TURQUOISE, glass = GLASS_BLUE;
-            const Vector3 N{0.0f, 0.456f, -0.89f};  // rake outward normal (front-up)
+            const Vector3 N{0.0f, 0.391f, -0.920f};  // rake outward normal (front-up)
             // Point on the rake surface at along-rake fraction t (0=emblem top, 1=roof) and width x.
             auto P = [](float t, float x) {
-                return Vector3{x, 0.40f + 0.78f * t, -1.95f + 0.40f * t};
+                return Vector3{x, 0.24f + 0.94f * t, -1.95f + 0.40f * t};
             };
             const float W = BODY_HALF_W;          // frame outer half-width (meets the side walls)
             const float xw = 0.74f;               // window half-width
-            const float tb = 0.12f, tt = 0.88f;   // window bottom / top along the rake
-            const Vector3 r{0.0f, -0.0274f, 0.0534f};  // recess offset = -N * 0.06
+            const float tb = 0.10f, tt = 0.90f;   // window bottom / top along the rake
+            const Vector3 r{0.0f, -0.0235f, 0.0552f};  // recess offset = -N * 0.06
             auto G = [&](float t, float x) { Vector3 p = P(t, x); return Vector3{p.x, p.y + r.y, p.z + r.z}; };
 
             // Frame border (body colour) on the rake surface; wound BL,TL,TR,BR -> normal N.
