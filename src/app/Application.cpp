@@ -24,6 +24,16 @@ namespace raylibgl::app {
             Color{150, 205, 255, 255},
         };
 
+        // Headlight spotlights, in the VAN's local frame (matching drawHeadlightLenses): one per
+        // lamp, aimed forward (-Z) and slightly down so the cone lands on the ground ahead.
+        constexpr int SPOT_COUNT = 2;
+        constexpr Vector3 SPOT_LOCAL_POS[SPOT_COUNT] = {
+            {-0.66f, -0.46f, -2.00f},
+            {0.66f, -0.46f, -2.00f},
+        };
+        constexpr Vector3 SPOT_LOCAL_DIR = {0.0f, -0.4472f, -0.8944f};  // normalize(0,-0.5,-1)
+        constexpr Color SPOT_COLOR = Color{255, 240, 205, 255};         // warm headlight beam
+
         constexpr const char* LIGHTING_VERTEX_SHADER = R"glsl(
 #version 330
 
@@ -33,22 +43,22 @@ in vec3 vertexNormal;
 in vec4 vertexColor;
 
 uniform mat4 mvp;
-uniform mat4 matModel;
 
 out vec3 fragPosition;
 out vec2 fragTexCoord;
 out vec4 fragColor;
 out vec3 fragNormal;
 
+// We draw in rlgl IMMEDIATE MODE under rlPushMatrix, so rlgl bakes the model (trackball)
+// transform straight into vertexPosition/vertexNormal -- they are ALREADY in world space.
+// Use them directly: multiplying by matModel would apply the transform a second time and
+// put the geometry in a different frame than the world-space lights (incl. the spotlights).
 void main()
 {
-    vec4 worldPosition = matModel * vec4(vertexPosition, 1.0);
-    mat3 normalMatrix = transpose(inverse(mat3(matModel)));
-
-    fragPosition = worldPosition.xyz;
+    fragPosition = vertexPosition;
     fragTexCoord = vertexTexCoord;
     fragColor = vertexColor;
-    fragNormal = normalize(normalMatrix * vertexNormal);
+    fragNormal = normalize(vertexNormal);
 
     gl_Position = mvp * vec4(vertexPosition, 1.0);
 }
@@ -66,6 +76,10 @@ uniform sampler2D texture0;
 uniform vec3 viewPos;
 uniform vec4 ambient;
 
+// Material-style emissive term (cf. MATERIAL_MAP_EMISSION): glowing parts ignore the
+// scene lights and output their own colour. 0 = normal lit surface.
+uniform float emission;
+
 uniform vec3 lightPos0;
 uniform vec4 lightColor0;
 uniform int lightEnabled0;
@@ -74,7 +88,31 @@ uniform vec3 lightPos1;
 uniform vec4 lightColor1;
 uniform int lightEnabled1;
 
+// Two headlight SPOTLIGHTS attached to the van (cone with soft edge + falloff).
+uniform vec3 spotPos[2];
+uniform vec3 spotDir[2];     // normalized beam direction (forward + down)
+uniform vec3 spotColor[2];
+uniform int spotEnabled;
+
 out vec4 finalColor;
+
+vec3 applySpot(int i, vec3 normal)
+{
+    vec3 toFrag = fragPosition - spotPos[i];
+    float dist = length(toFrag);
+    vec3 dir = toFrag / max(dist, 0.0001);
+
+    // Cone: full inside ~20deg, fading to 0 by ~38deg off the beam axis.
+    float cosA = dot(dir, normalize(spotDir[i]));
+    float inner = 0.94;
+    float outer = 0.79;
+    float cone = clamp((cosA - outer) / (inner - outer), 0.0, 1.0);
+    if (cone <= 0.0) return vec3(0.0);
+
+    float attenuation = 1.0 / (1.0 + 0.07 * dist + 0.03 * dist * dist);
+    float diffuse = max(dot(normal, -dir), 0.0);
+    return spotColor[i] * (cone * cone) * attenuation * diffuse * 2.6;
+}
 
 vec3 applyPointLight(vec3 normal, vec3 viewDir, vec3 position, vec4 color, int enabled)
 {
@@ -82,14 +120,16 @@ vec3 applyPointLight(vec3 normal, vec3 viewDir, vec3 position, vec4 color, int e
 
     vec3 lightDir = normalize(position - fragPosition);
     float distanceToLight = length(position - fragPosition);
-    float attenuation = 1.0 / (1.0 + 0.045 * distanceToLight + 0.010 * distanceToLight * distanceToLight);
+    // Gentle attenuation so both lights comfortably reach the model.
+    float attenuation = 1.0 / (1.0 + 0.022 * distanceToLight + 0.0019 * distanceToLight * distanceToLight);
 
     float diffuse = max(dot(normal, lightDir), 0.0);
 
-    vec3 reflectDir = reflect(-lightDir, normal);
-    float specular = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
+    // Blinn-Phong specular, only on lit-facing surfaces (no specular leak on the dark side).
+    vec3 halfDir = normalize(lightDir + viewDir);
+    float specular = pow(max(dot(normal, halfDir), 0.0), 48.0) * step(0.0001, diffuse);
 
-    return color.rgb * attenuation * (0.85 * diffuse + 0.35 * specular);
+    return color.rgb * attenuation * (diffuse + 0.25 * specular);
 }
 
 void main()
@@ -100,11 +140,29 @@ void main()
     vec3 normal = normalize(fragNormal);
     vec3 viewDir = normalize(viewPos - fragPosition);
 
-    vec3 lighting = ambient.rgb;
+    // Soft hemispheric ambient: cooler light from the sky above, warmer bounce from below.
+    float hemi = normal.y * 0.5 + 0.5;
+    vec3 ambientCol = mix(ambient.rgb * vec3(1.10, 0.98, 0.86),   // ground bounce (warm)
+                          ambient.rgb * vec3(0.86, 0.97, 1.18),   // sky (cool)
+                          hemi);
+
+    vec3 lighting = ambientCol;
     lighting += applyPointLight(normal, viewDir, lightPos0, lightColor0, lightEnabled0);
     lighting += applyPointLight(normal, viewDir, lightPos1, lightColor1, lightEnabled1);
 
-    finalColor = vec4(texel.rgb * lighting, texel.a);
+    // Subtle cool fresnel rim to lift the silhouette and give the flats some life.
+    float fresnel = pow(1.0 - max(dot(normal, viewDir), 0.0), 4.0);
+    lighting += fresnel * vec3(0.35, 0.45, 0.60) * 0.45;
+
+    // Headlight spotlights (cast a warm pool on the ground in front of the van).
+    if (spotEnabled == 1) {
+        lighting += applySpot(0, normal);
+        lighting += applySpot(1, normal);
+    }
+
+    // Emissive material: add the surface's own colour on top of (independent of) lighting.
+    vec3 rgb = texel.rgb * lighting + texel.rgb * emission;
+    finalColor = vec4(rgb, texel.a);
 }
 )glsl";
 
@@ -210,9 +268,31 @@ void main()
         }
 
         updateLightingShader();
+
+        const float emissiveOn = 1.4f;   // head/tail light cores: bright emissive material
+        const float emissiveOff = 0.0f;
+
         BeginShaderMode(m_lightingShader);
-        model::drawCar(false);
+        {
+            // 1) Opaque body, lit by the scene lights (emission off).
+            SetShaderValue(m_lightingShader, m_emissionLoc, &emissiveOff, SHADER_UNIFORM_FLOAT);
+            model::drawCarBody(false);
+            rlDrawRenderBatchActive();  // flush so the emission change below doesn't affect the body
+
+            // 2) Head/tail light cores as an EMISSIVE material (MATERIAL_MAP_EMISSION-style):
+            //    they output their own colour on top of the lighting, so they read as lit lamps.
+            SetShaderValue(m_lightingShader, m_emissionLoc, &emissiveOn, SHADER_UNIFORM_FLOAT);
+            model::drawCarLights(false);
+            rlDrawRenderBatchActive();
+
+            // 3) Semi-transparent windshield, drawn last (emission off) so alpha blends over the body.
+            SetShaderValue(m_lightingShader, m_emissionLoc, &emissiveOff, SHADER_UNIFORM_FLOAT);
+            model::drawCarGlass(false);
+        }
         EndShaderMode();
+
+        // 4) Additive bloom halos around the lights (not a surface material -- a glow effect).
+        model::drawCarGlow(false);
     }
 
     void Application::drawLightMarkers() {
@@ -227,6 +307,7 @@ void main()
 
         m_viewPosLoc = GetShaderLocation(m_lightingShader, "viewPos");
         m_ambientLoc = GetShaderLocation(m_lightingShader, "ambient");
+        m_emissionLoc = GetShaderLocation(m_lightingShader, "emission");
 
         m_lightPosLoc[0] = GetShaderLocation(m_lightingShader, "lightPos0");
         m_lightColorLoc[0] = GetShaderLocation(m_lightingShader, "lightColor0");
@@ -236,13 +317,30 @@ void main()
         m_lightColorLoc[1] = GetShaderLocation(m_lightingShader, "lightColor1");
         m_lightEnabledLoc[1] = GetShaderLocation(m_lightingShader, "lightEnabled1");
 
-        const float ambient[4] = {0.18f, 0.18f, 0.20f, 1.0f};
+        m_spotPosLoc = GetShaderLocation(m_lightingShader, "spotPos");
+        m_spotDirLoc = GetShaderLocation(m_lightingShader, "spotDir");
+        m_spotColorLoc = GetShaderLocation(m_lightingShader, "spotColor");
+        m_spotEnabledLoc = GetShaderLocation(m_lightingShader, "spotEnabled");
+
+        const float ambient[4] = {0.30f, 0.31f, 0.34f, 1.0f};
         SetShaderValue(m_lightingShader, m_ambientLoc, ambient, SHADER_UNIFORM_VEC4);
+
+        const float emission = 0.0f;  // default: surfaces are lit, not emissive
+        SetShaderValue(m_lightingShader, m_emissionLoc, &emission, SHADER_UNIFORM_FLOAT);
 
         for (int i = 0; i < LIGHT_COUNT; ++i) {
             setVector3Uniform(m_lightingShader, m_lightPosLoc[i], LIGHT_POSITIONS[i]);
             setColorUniform(m_lightingShader, m_lightColorLoc[i], LIGHT_COLORS[i]);
         }
+
+        // Spotlight colours + enable are constant; positions/directions are updated per frame.
+        const float spotColors[SPOT_COUNT * 3] = {
+            SPOT_COLOR.r / 255.0f, SPOT_COLOR.g / 255.0f, SPOT_COLOR.b / 255.0f,
+            SPOT_COLOR.r / 255.0f, SPOT_COLOR.g / 255.0f, SPOT_COLOR.b / 255.0f,
+        };
+        SetShaderValueV(m_lightingShader, m_spotColorLoc, spotColors, SHADER_UNIFORM_VEC3, SPOT_COUNT);
+        const int spotOn = 1;
+        SetShaderValue(m_lightingShader, m_spotEnabledLoc, &spotOn, SHADER_UNIFORM_INT);
     }
 
     void Application::unloadLightingShader() {
@@ -265,6 +363,24 @@ void main()
             setVector3Uniform(m_lightingShader, m_lightPosLoc[i], LIGHT_POSITIONS[i]);
             setColorUniform(m_lightingShader, m_lightColorLoc[i], LIGHT_COLORS[i]);
         }
+
+        // The headlight spotlights are attached to the van, so transform their local pos/dir by
+        // the same trackball rotation the model is drawn with (see drawSceneRlgl).
+        const Matrix rot = m_camera.GetRotation();
+        float spotPos[SPOT_COUNT * 3];
+        float spotDir[SPOT_COUNT * 3];
+        for (int i = 0; i < SPOT_COUNT; ++i) {
+            const Vector3 p = Vector3Transform(SPOT_LOCAL_POS[i], rot);
+            const Vector3 d = Vector3Normalize(Vector3Transform(SPOT_LOCAL_DIR, rot));
+            spotPos[i * 3 + 0] = p.x;
+            spotPos[i * 3 + 1] = p.y;
+            spotPos[i * 3 + 2] = p.z;
+            spotDir[i * 3 + 0] = d.x;
+            spotDir[i * 3 + 1] = d.y;
+            spotDir[i * 3 + 2] = d.z;
+        }
+        SetShaderValueV(m_lightingShader, m_spotPosLoc, spotPos, SHADER_UNIFORM_VEC3, SPOT_COUNT);
+        SetShaderValueV(m_lightingShader, m_spotDirLoc, spotDir, SHADER_UNIFORM_VEC3, SPOT_COUNT);
     }
 
 } // namespace raylibgl::app

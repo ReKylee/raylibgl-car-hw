@@ -35,9 +35,15 @@ namespace raylibgl::app {
         Shader m_lightingShader{};
         int m_viewPosLoc = -1;
         int m_ambientLoc = -1;
+        int m_emissionLoc = -1;
         int m_lightPosLoc[2] = {-1, -1};
         int m_lightColorLoc[2] = {-1, -1};
         int m_lightEnabledLoc[2] = {-1, -1};
+
+        int m_spotPosLoc = -1;
+        int m_spotDirLoc = -1;
+        int m_spotColorLoc = -1;
+        int m_spotEnabledLoc = -1;
     };
 
 } // namespace raylibgl::app

@@ -145,6 +145,7 @@ namespace raylibgl::model {
         constexpr float DECAL_X = 1.005f;  // flush on the side wall (x=1.00) so it can't float/clip
 
         Texture2D g_sideDecal{};
+        Texture2D g_glow{};  // soft radial sprite, additively blended to make the lights bloom
         bool g_resourcesLoaded = false;
 
         void ensureResourcesLoaded() {
@@ -158,6 +159,13 @@ namespace raylibgl::model {
             g_sideDecal = LoadTextureFromImage(image);
             SetTextureFilter(g_sideDecal, TEXTURE_FILTER_POINT);
             UnloadImage(image);
+
+            // White radial glow (bright opaque centre fading to transparent) tinted at draw time.
+            Image gi = GenImageGradientRadial(128, 128, 0.10f, Color{255, 255, 255, 255}, Color{255, 255, 255, 0});
+            g_glow = LoadTextureFromImage(gi);
+            SetTextureFilter(g_glow, TEXTURE_FILTER_BILINEAR);
+            UnloadImage(gi);
+
             g_resourcesLoaded = true;
         }
 
@@ -308,7 +316,10 @@ namespace raylibgl::model {
         // colour border around a rectangular opening, with ONE glass rectangle rotated to the
         // rake angle and recessed inside it; reveal walls close the inset depth.
         void drawWindshield(bool wire) {
-            const Color body = BODY_TURQUOISE, glass = GLASS_BLUE;
+            const Color body = BODY_TURQUOISE;
+            // Semi-transparent glass: keep the blue hue, drop the alpha so the body/scene
+            // behind shows through. (The frame + reveals stay fully opaque body colour.)
+            const Color glass = Color{GLASS_BLUE.r, GLASS_BLUE.g, GLASS_BLUE.b, 165};
             const Vector3 N{0.0f, 0.391f, -0.920f};  // rake outward normal (front-up)
             // Point on the rake surface at along-rake fraction t (0=emblem top, 1=roof) and width x.
             auto P = [](float t, float x) {
@@ -326,25 +337,24 @@ namespace raylibgl::model {
             quad3(P(tb, -W), P(tt, -W), P(tt, -xw), P(tb, -xw), N, body, wire);    // left pillar
             quad3(P(tb, xw), P(tt, xw), P(tt, W), P(tb, W), N, body, wire);        // right pillar
 
-            // ONE glass rectangle, recessed along -N (rotated to the rake angle).
-            quad3(G(tb, -xw), G(tt, -xw), G(tt, xw), G(tb, xw), N, glass, wire);
-
             // Reveal walls closing the gap between the frame opening and the recessed glass.
             quad3(P(tb, -xw), G(tb, -xw), G(tb, xw), P(tb, xw), Vector3{0.0f, 1.0f, 0.0f}, body, wire);   // bottom
             quad3(P(tt, xw), G(tt, xw), G(tt, -xw), P(tt, -xw), Vector3{0.0f, -1.0f, 0.0f}, body, wire);  // top
             quad3(P(tt, -xw), G(tt, -xw), G(tb, -xw), P(tb, -xw), Vector3{1.0f, 0.0f, 0.0f}, body, wire); // left
             quad3(P(tb, xw), G(tb, xw), G(tt, xw), P(tt, xw), Vector3{-1.0f, 0.0f, 0.0f}, body, wire);    // right
+
+            // ONE glass rectangle, recessed along -N (rotated to the rake angle). Drawn LAST,
+            // semi-transparent, so it blends over the reveals/body behind it.
+            quad3(G(tb, -xw), G(tt, -xw), G(tt, xw), G(tb, xw), N, glass, wire);
         }
 
-        // Two front headlights, right above the bumper: a yellow lens RECESSED inside a
-        // proud grey frame (4 bars), so the lens reads as inset -- built like image 1.
-        void drawHeadlights(bool wire) {
+        // Headlights, right above the bumper: a yellow lens RECESSED inside a proud grey
+        // frame. Split so the housing is lit with the body while the lens is drawn emissive.
+        // Grey frame (4 bars) -- lit like the rest of the body.
+        void drawHeadlightHousings(bool wire) {
             for (int sx = -1; sx <= 1; sx += 2) {
                 rlPushMatrix();
                 rlTranslatef(sx * 0.66f, -0.46f, -1.95f);  // flanking the logo, just above the bumper
-                // recessed yellow lens (proud of the body, but set back from the frame)
-                drawBox(Vector3{0.0f, 0.0f, -0.03f}, Vector3{0.30f, 0.20f, 0.04f}, LOGO_YELLOW, wire);
-                // proud grey frame around it
                 drawBox(Vector3{0.0f, 0.13f, -0.05f}, Vector3{0.42f, 0.06f, 0.10f}, METAL_GREY, wire);   // top
                 drawBox(Vector3{0.0f, -0.13f, -0.05f}, Vector3{0.42f, 0.06f, 0.10f}, METAL_GREY, wire);  // bottom
                 drawBox(Vector3{-0.18f, 0.0f, -0.05f}, Vector3{0.06f, 0.32f, 0.10f}, METAL_GREY, wire);  // left
@@ -352,6 +362,17 @@ namespace raylibgl::model {
                 rlPopMatrix();
             }
         }
+        // Hot lens core -- EMISSIVE (drawn unlit by the caller, with an additive bloom halo
+        // added in drawCarLights), so the headlights read as bright glowing lamps.
+        void drawHeadlightLenses(bool wire) {
+            for (int sx = -1; sx <= 1; sx += 2) {
+                rlPushMatrix();
+                rlTranslatef(sx * 0.66f, -0.46f, -1.95f);
+                drawBox(Vector3{0.0f, 0.0f, -0.03f}, Vector3{0.30f, 0.20f, 0.04f}, Color{255, 247, 222, 255}, wire);
+                rlPopMatrix();
+            }
+        }
+        void drawHeadlights(bool wire) { drawHeadlightHousings(wire); drawHeadlightLenses(wire); }
 
         void drawRoofBars(bool wire) { drawParts(ROOFBAR_PARTS, wire); }  // the two grey roof cross-bars
 
@@ -368,14 +389,29 @@ namespace raylibgl::model {
             }
         }
 
-        // Two red rectangle tail-lights above the rear bumper (left + right).
+        // Two red rectangle tail-lights above the rear bumper (emissive core; bloom added later).
         void drawTailLights(bool wire) {
             for (int sx = -1; sx <= 1; sx += 2) {
                 rlPushMatrix();
                 rlTranslatef(sx * TAIL_X, TAIL_Y, TAIL_Z);
-                drawBox(Vector3{0.0f, 0.0f, 0.0f}, Vector3{0.34f, 0.26f, 0.14f}, TAIL_RED, wire);
+                drawBox(Vector3{0.0f, 0.0f, 0.0f}, Vector3{0.34f, 0.26f, 0.14f}, Color{240, 56, 46, 255}, wire);
                 rlPopMatrix();
             }
+        }
+
+        // One additive radial glow sprite (centre x,y,z) on a Z-facing plane. Backface culling
+        // is disabled by the caller, so the winding is irrelevant -- it just blooms outward.
+        void drawGlowSprite(float x, float y, float z, float hw, float hh, Color col) {
+            rlSetTexture(g_glow.id);
+            rlBegin(RL_QUADS);
+            rlColor4ub(col.r, col.g, col.b, col.a);
+            rlNormal3f(0.0f, 0.0f, -1.0f);
+            rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x - hw, y - hh, z);
+            rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x + hw, y - hh, z);
+            rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x + hw, y + hh, z);
+            rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x - hw, y + hh, z);
+            rlEnd();
+            rlSetTexture(0);
         }
 
         // Front emblem: a yellow disk (cylinder, axle along +Z) with three orange sticks
@@ -445,6 +481,17 @@ namespace raylibgl::model {
             rlSetTexture(0);
         }
 
+        // Dark asphalt ground patch (a diorama base) so the headlight spotlights cast a visible
+        // pool in front of the van. Drawn in the van's frame and lit by the scene + spotlights;
+        // the wheels rest on it. A single quad is fine -- the spotlight pool is per-pixel.
+        constexpr float GROUND_Y = WHEEL_Y - TIRE_RADIUS;  // wheels rest on it (~ -1.32)
+        void drawGround(bool wire) {
+            const Color c = Color{46, 48, 56, 255};
+            const float x0 = -3.2f, x1 = 3.2f, z0 = -4.8f, z1 = 3.0f, gy = GROUND_Y;
+            quad3(Vector3{x0, gy, z0}, Vector3{x0, gy, z1}, Vector3{x1, gy, z1}, Vector3{x1, gy, z0},
+                  Vector3{0.0f, 1.0f, 0.0f}, c, wire);
+        }
+
     } // namespace
 
     // ===== Public building blocks (declared in the header) =============================
@@ -490,26 +537,71 @@ namespace raylibgl::model {
         if (g_sideDecal.id != 0) {
             UnloadTexture(g_sideDecal);
         }
+        if (g_glow.id != 0) {
+            UnloadTexture(g_glow);
+        }
         g_sideDecal = {};
+        g_glow = {};
         g_resourcesLoaded = false;
+    }
+
+    // Opaque, lit parts: the hull + wheels + emblem + grey headlight housings + decals.
+    void drawCarBody(bool wire) {
+        ensureResourcesLoaded();
+        drawGround(wire);           // asphalt base that catches the headlight spotlights
+        drawChassis(wire);          // one-mesh body hull + grey bumpers + roof bars
+        drawWheels(wire);           // 4 cylinder wheels
+        drawFrontLogo(wire);        // front emblem
+        drawHeadlightHousings(wire);// grey light surrounds (lit)
+        for (int sx = -1; sx <= 1; sx += 2) {
+            drawSideDecal(sx, wire);  // the one textured feature: the flame side decal
+        }
+    }
+
+    // Emissive light cores: the hot headlight lenses + red tail-lights. The caller marks
+    // these with the shader's emissive material term (uniform `emission`), so they output
+    // their own colour and read as glowing lamps instead of dim lit boxes.
+    void drawCarLights(bool wire) {
+        drawHeadlightLenses(wire);
+        drawTailLights(wire);
+    }
+
+    // Additive bloom halos around each light -- a glow EFFECT (not a surface material), so it
+    // is drawn outside the lighting shader with additive blending + depth-write off.
+    void drawCarGlow(bool wire) {
+        if (wire || g_glow.id == 0) {
+            return;
+        }
+        rlSetBlendMode(RL_BLEND_ADDITIVE);
+        rlDisableBackfaceCulling();
+        rlDisableDepthMask();
+        const Color warm = Color{255, 236, 180, 255};
+        const Color red = Color{255, 64, 48, 255};
+        for (int sx = -1; sx <= 1; sx += 2) {
+            drawGlowSprite(sx * 0.66f, -0.46f, -2.04f, 0.42f, 0.36f, warm);          // headlight halo
+            drawGlowSprite(sx * 0.66f, -0.46f, -2.04f, 0.20f, 0.17f, warm);          // headlight hot core
+            drawGlowSprite(sx * TAIL_X, TAIL_Y, TAIL_Z + 0.12f, 0.36f, 0.32f, red);  // tail-light halo
+            drawGlowSprite(sx * TAIL_X, TAIL_Y, TAIL_Z + 0.12f, 0.18f, 0.15f, red);  // tail-light hot core
+        }
+        rlDrawRenderBatchActive();
+        rlEnableDepthMask();
+        rlEnableBackfaceCulling();
+        rlSetBlendMode(RL_BLEND_ALPHA);
+    }
+
+    // Semi-transparent windshield (its opaque body-colour frame + the glass). Draw LAST.
+    void drawCarGlass(bool wire) {
+        drawWindshield(wire);
     }
 
     void drawCar(bool wire) {
         ensureResourcesLoaded();
-
         rlPushMatrix();
         {
-            drawChassis(wire);      // one-mesh body hull + grey bumpers + roof bars
-            drawWheels(wire);       // 4 cylinder wheels
-            drawFrontLogo(wire);    // front emblem
-            drawWindshield(wire);   // front glass
-            drawHeadlights(wire);   // front lights
-            drawTailLights(wire);   // rear lights
-
-            // The one textured feature: the flame side decal, left + right.
-            for (int sx = -1; sx <= 1; sx += 2) {
-                drawSideDecal(sx, wire);
-            }
+            drawCarBody(wire);
+            drawCarLights(wire);
+            drawCarGlass(wire);
+            drawCarGlow(wire);
         }
         rlPopMatrix();
     }
