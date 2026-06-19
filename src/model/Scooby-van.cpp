@@ -214,10 +214,47 @@ namespace raylibgl::model {
         };
         constexpr int BODY_OUTLINE_N = 14;
 
-        // Filled side wall as 4 convex pieces: the upper band (above the arches), plus the
-        // lower body in front of the front wheel, between the wheels, and behind the rear.
-        constexpr ProfilePt BODY_TOP[] = {
-            {-1.95f, ARCH_Y}, {-1.95f, 0.24f}, {-1.55f, 1.18f}, {1.55f, 1.18f}, {1.92f, 0.70f}, {1.95f, ARCH_Y},
+        // --- Front doors (both sides) ----------------------------------------------------
+        // The door is a TRAPEZOID carved into the upper side band: a raked front edge (following
+        // the windshield / A-pillar), a vertical rear edge, and horizontal top + bottom. The
+        // window is the SAME trapezoid inset by a constant width on every edge, so the door
+        // panel between them is an equal-width trapezoid frame whose strips miter together.
+        // Built like the windshield: body -> (recess) -> door panel -> (recess) -> glass.
+        // Door opening corners (z, y):
+        // The front edge follows the van's front profile: a BENT edge -- raked back parallel to
+        // the windshield/A-pillar (slope ~0.42) from the top DOWN to the emblem-cylinder height
+        // (y0.22), then STRAIGHT DOWN. Bottom = y-0.15, leaving a visible body strip (~0.20) below
+        // the door before the arch (and 0.35 clearance to the wheel top). (5-corner pentagon.)
+        constexpr float DOOR_BOTTOM = -0.15f;
+        constexpr ProfilePt D_FT{-1.35f, 0.95f};         // front-top
+        constexpr ProfilePt D_FBend{-1.66f, 0.22f};      // front edge BENDS here (emblem-cylinder height)
+        constexpr ProfilePt D_FB{-1.66f, DOOR_BOTTOM};   // front-bottom (straight down from the bend)
+        constexpr ProfilePt D_RT{-0.62f, 0.95f};         // rear-top
+        constexpr ProfilePt D_RB{-0.62f, DOOR_BOTTOM};   // rear-bottom
+        // Window sits in the slanted upper part (bottom at y0.22 = the bend); its front edge is
+        // parallel to the raked door front (inset ~0.09); a solid lower door fills below the bend.
+        constexpr ProfilePt W_FB{-1.56f, 0.22f};
+        constexpr ProfilePt W_FT{-1.288f, 0.86f};
+        constexpr ProfilePt W_RT{-0.71f, 0.86f};
+        constexpr ProfilePt W_RB{-0.71f, 0.22f};
+        constexpr float DOOR_X = 0.91f;   // door panel plane (recessed in from body 0.99)
+        constexpr float GLASS_X = 0.85f;  // door glass plane (recessed in from the panel)
+
+        // The upper side band (formerly one BODY_TOP hexagon) re-tiled as 4 regions that fill
+        // it everywhere EXCEPT the trapezoidal door hole. Each is fan-triangulated from [0].
+        constexpr ProfilePt BODY_FRONT_PILLAR[] = {  // front face + rake + A-pillar, left of the door
+            {-1.95f, ARCH_Y}, {-1.95f, 0.24f}, {-1.55f, 1.18f}, {-1.35f, 1.18f},
+            {-1.35f, 0.95f}, {-1.66f, 0.22f}, {-1.66f, ARCH_Y},
+        };
+        constexpr ProfilePt BODY_DOOR_TOP[] = {      // strip above the door, up to the roof
+            {-1.35f, 0.95f}, {-1.35f, 1.18f}, {-0.62f, 1.18f}, {-0.62f, 0.95f},
+        };
+        constexpr ProfilePt BODY_DOOR_BOTTOM[] = {   // body margin below the door, down to the arch line
+            {-1.66f, ARCH_Y}, {-1.66f, DOOR_BOTTOM}, {-0.62f, DOOR_BOTTOM}, {-0.62f, ARCH_Y},
+        };
+        constexpr ProfilePt BODY_REAR_PANEL[] = {    // the whole side behind the door
+            {-0.62f, ARCH_Y}, {-0.62f, 0.95f}, {-0.62f, 1.18f},
+            {1.55f, 1.18f}, {1.92f, 0.70f}, {1.95f, ARCH_Y},
         };
         constexpr ProfilePt BODY_FRONT_LOWER[] = {
             {-1.95f, BODY_BOTTOM}, {-1.95f, ARCH_Y}, {-1.22f, ARCH_Y}, {-1.42f, BODY_BOTTOM},
@@ -238,6 +275,8 @@ namespace raylibgl::model {
                 rlVertex3f(L, p[0].y, p[0].z); rlVertex3f(L, p[i + 1].y, p[i + 1].z); rlVertex3f(L, p[i].y, p[i].z);
             }
         }
+
+        void drawDoorFrame(int sx, bool wire);  // front door panel + reveals (defined below)
 
         void drawBodyShell(bool wire) {
             const Color col = BODY_TURQUOISE;
@@ -267,10 +306,14 @@ namespace raylibgl::model {
             rlDrawRenderBatchActive();
             rlDisableBackfaceCulling();
 
-            // Side walls (4 convex pieces).
+            // Side walls. The upper band is 4 regions tiling AROUND the front door hole; the
+            // lower body is the 3 pieces in front of / between / behind the wheels.
             rlBegin(RL_TRIANGLES);
             rlColor4ub(col.r, col.g, col.b, col.a);
-            emitSideFan(BODY_TOP, 6, L, R);
+            emitSideFan(BODY_FRONT_PILLAR, 7, L, R);
+            emitSideFan(BODY_DOOR_TOP, 4, L, R);
+            emitSideFan(BODY_DOOR_BOTTOM, 4, L, R);
+            emitSideFan(BODY_REAR_PANEL, 6, L, R);
             emitSideFan(BODY_FRONT_LOWER, 4, L, R);
             emitSideFan(BODY_SILL, 4, L, R);
             emitSideFan(BODY_REAR_LOWER, 4, L, R);
@@ -286,14 +329,24 @@ namespace raylibgl::model {
                 const ProfilePt& a = BODY_OUTLINE[i];
                 const ProfilePt& b = BODY_OUTLINE[(i + 1) % BODY_OUTLINE_N];
                 const float dz = b.z - a.z, dy = b.y - a.y;
-                const float len = std::sqrt(dz * dz + dy * dy);
-                const float ny = (len > 0.0f) ? dz / len : 0.0f;
-                const float nz = (len > 0.0f) ? -dy / len : 0.0f;
+                float ny, nz;
+                if (dy == 0.0f && a.y == BODY_BOTTOM) {
+                    ny = 1.0f; nz = 0.0f;  // a flat floor strip: face UP so it lights as a proper floor
+                } else {
+                    const float len = std::sqrt(dz * dz + dy * dy);
+                    ny = (len > 0.0f) ? dz / len : 0.0f;
+                    nz = (len > 0.0f) ? -dy / len : 0.0f;
+                }
                 rlNormal3f(0.0f, ny, nz);
                 rlVertex3f(L, a.y, a.z); rlVertex3f(L, b.y, b.z);
                 rlVertex3f(R, b.y, b.z); rlVertex3f(R, a.y, a.z);
             }
             rlEnd();
+
+            // Inset front doors (panel frame + recess reveals) on both sides. Drawn here, inside
+            // the culling-off block, so the recessed faces read from any angle without winding.
+            drawDoorFrame(-1, wire);
+            drawDoorFrame(1, wire);
 
             rlDrawRenderBatchActive();
             rlEnableBackfaceCulling();
@@ -320,6 +373,211 @@ namespace raylibgl::model {
             rlEnd();
         }
 
+        // One front door (sx = -1 left, +1 right). The door panel is an equal-width trapezoid
+        // frame (T_door minus T_window) recessed into the body at DOOR_X; reveal walls close the
+        // door recess (body 0.99 -> panel) and the window recess (panel -> glass GLASS_X). The
+        // semi-transparent trapezoid glass itself is drawn by drawDoorGlass in the glass pass.
+        void drawDoorFrame(int sx, bool wire) {
+            const Color body = BODY_TURQUOISE;
+            const float bx = sx * BODY_HALF_W;  // body side-wall plane
+            const float dx = sx * DOOR_X;       // door panel plane
+            const float gx = sx * GLASS_X;      // glass plane
+            const Vector3 nOut{static_cast<float>(sx), 0.0f, 0.0f};
+            auto V = [](ProfilePt p, float x) { return Vector3{x, p.y, p.z}; };
+            const ProfilePt SILL{-0.62f, 0.22f};  // door rear edge at the window-sill / bend height
+
+            // Door panel (at dx): a solid lower door + 3 equal-width frame strips around the window
+            // (the window sill sits at the bend, so there is no separate bottom frame strip).
+            quad3(V(D_FB, dx), V(D_RB, dx), V(SILL, dx), V(D_FBend, dx), nOut, body, wire);  // lower door
+            quad3(V(D_FBend, dx), V(D_FT, dx), V(W_FT, dx), V(W_FB, dx), nOut, body, wire);  // front frame
+            quad3(V(D_FT, dx), V(D_RT, dx), V(W_RT, dx), V(W_FT, dx), nOut, body, wire);     // top frame
+            quad3(V(D_RT, dx), V(SILL, dx), V(W_RB, dx), V(W_RT, dx), nOut, body, wire);     // rear frame
+
+            // Door recess reveals: body opening (bx) -> door panel (dx), around the pentagon edge.
+            quad3(V(D_FT, bx), V(D_FBend, bx), V(D_FBend, dx), V(D_FT, dx), Vector3{0, 0, 1}, body, wire);  // front slant
+            quad3(V(D_FBend, bx), V(D_FB, bx), V(D_FB, dx), V(D_FBend, dx), Vector3{0, 0, 1}, body, wire);  // front vertical
+            quad3(V(D_FB, bx), V(D_RB, bx), V(D_RB, dx), V(D_FB, dx), Vector3{0, 1, 0}, body, wire);        // bottom
+            quad3(V(D_RB, bx), V(D_RT, bx), V(D_RT, dx), V(D_RB, dx), Vector3{0, 0, -1}, body, wire);       // rear
+            quad3(V(D_RT, bx), V(D_FT, bx), V(D_FT, dx), V(D_RT, dx), Vector3{0, -1, 0}, body, wire);       // top
+
+            // Window recess reveals: door panel (dx) -> glass (gx), around the window edge.
+            quad3(V(W_FB, dx), V(W_FT, dx), V(W_FT, gx), V(W_FB, gx), Vector3{0, 0, 1}, body, wire);   // front
+            quad3(V(W_FT, dx), V(W_RT, dx), V(W_RT, gx), V(W_FT, gx), Vector3{0, -1, 0}, body, wire);  // top
+            quad3(V(W_RT, dx), V(W_RB, dx), V(W_RB, gx), V(W_RT, gx), Vector3{0, 0, -1}, body, wire);  // rear
+            quad3(V(W_RB, dx), V(W_FB, dx), V(W_FB, gx), V(W_RB, gx), Vector3{0, 1, 0}, body, wire);   // bottom
+        }
+
+        // The front-door glass: a semi-transparent trapezoid recessed at GLASS_X (glass pass).
+        void drawDoorGlass(int sx, bool wire) {
+            const float gx = sx * GLASS_X;
+            const Color glass = Color{GLASS_BLUE.r, GLASS_BLUE.g, GLASS_BLUE.b, 140};
+            const Vector3 nOut{static_cast<float>(sx), 0.0f, 0.0f};
+            auto V = [](ProfilePt p, float x) { return Vector3{x, p.y, p.z}; };
+            quad3(V(W_FB, gx), V(W_FT, gx), V(W_RT, gx), V(W_RB, gx), nOut, glass, wire);
+        }
+
+        // Front bench seat in the cabin: a simple 2-CUBE turquoise bench (solid boxes, so it
+        // reads in wireframe too) -- a flat cushion box + a tall thin seat-back box tilted
+        // slightly back, the back reaching to just under the windshield base (y0.24).
+        void drawSeats(bool wire) {
+            const Color col = BODY_TURQUOISE;
+            // ~2x larger than the first pass (width capped at ~1.8 so it doesn't poke through the
+            // ~1.98-wide cabin; thickness, depth and back height doubled).
+            drawBox(Vector3{0.0f, -0.36f, -1.00f}, Vector3{1.5f, 0.24f, 0.72f}, col, wire);  // cushion
+            rlPushMatrix();
+            rlTranslatef(0.0f, -0.24f, -0.64f);   // pivot at the back of the cushion
+            rlRotatef(13.0f, 1.0f, 0.0f, 0.0f);   // tilt the seat-back top slightly backward
+            drawBox(Vector3{0.0f, 0.52f, 0.0f}, Vector3{1.5f, 1.04f, 0.20f}, col, wire);     // seat back
+            rlPopMatrix();
+        }
+
+        // One triangle with a computed outward face normal (call inside rlBegin(RL_TRIANGLES)).
+        void emitTri(Vector3 a, Vector3 b, Vector3 c) {
+            const float ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z;
+            const float vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z;
+            float nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+            const float len = std::sqrt(nx * nx + ny * ny + nz * nz);
+            if (len > 0.0f) { nx /= len; ny /= len; nz /= len; }
+            rlNormal3f(nx, ny, nz);
+            rlVertex3f(a.x, a.y, a.z); rlVertex3f(b.x, b.y, b.z); rlVertex3f(c.x, c.y, c.z);
+        }
+
+        // UV sphere BAND from latitude latMin..latMax (full sphere = -PI/2..PI/2; a smaller
+        // latMax leaves an open top = a bowl). Outward per-vertex normals; wire = lat/long cage.
+        void drawSphere(Vector3 ctr, float r, float latMin, float latMax, int rings, int slices, Color col, bool wire) {
+            auto dir = [](float lat, float lon) {
+                return Vector3{std::cos(lat) * std::cos(lon), std::sin(lat), std::cos(lat) * std::sin(lon)};
+            };
+            auto put = [&](Vector3 d) { rlVertex3f(ctr.x + r * d.x, ctr.y + r * d.y, ctr.z + r * d.z); };
+            auto lat = [&](int i) { return latMin + (latMax - latMin) * (float)i / rings; };
+            if (wire) {
+                rlBegin(RL_LINES);
+                rlColor4ub(col.r, col.g, col.b, col.a);
+                for (int i = 0; i <= rings; ++i)
+                    for (int j = 0; j < slices; ++j) { put(dir(lat(i), 2*PI*j/slices)); put(dir(lat(i), 2*PI*(j+1)/slices)); }
+                for (int j = 0; j < slices; ++j)
+                    for (int i = 0; i < rings; ++i) { put(dir(lat(i), 2*PI*j/slices)); put(dir(lat(i+1), 2*PI*j/slices)); }
+                rlEnd();
+                return;
+            }
+            rlBegin(RL_TRIANGLES);
+            rlColor4ub(col.r, col.g, col.b, col.a);
+            auto V = [&](Vector3 d) { rlNormal3f(d.x, d.y, d.z); put(d); };
+            for (int i = 0; i < rings; ++i) {
+                float la0 = lat(i), la1 = lat(i+1);
+                for (int j = 0; j < slices; ++j) {
+                    float lo0 = 2*PI*j/slices, lo1 = 2*PI*(j+1)/slices;
+                    Vector3 a=dir(la0,lo0), b=dir(la1,lo0), c=dir(la1,lo1), d=dir(la0,lo1);
+                    V(a); V(b); V(c);
+                    V(a); V(c); V(d);
+                }
+            }
+            rlEnd();
+        }
+
+        // Flat horizontal disk (normal +Y) -- used for the aquarium's water surface.
+        void drawDisk(Vector3 c, float r, int slices, Color col, bool wire) {
+            if (wire) {
+                rlBegin(RL_LINES);
+                rlColor4ub(col.r, col.g, col.b, col.a);
+                for (int j = 0; j < slices; ++j) {
+                    float a0 = 2*PI*j/slices, a1 = 2*PI*(j+1)/slices;
+                    rlVertex3f(c.x+r*std::cos(a0), c.y, c.z+r*std::sin(a0));
+                    rlVertex3f(c.x+r*std::cos(a1), c.y, c.z+r*std::sin(a1));
+                }
+                rlEnd();
+                return;
+            }
+            rlBegin(RL_TRIANGLES);
+            rlColor4ub(col.r, col.g, col.b, col.a);
+            for (int j = 0; j < slices; ++j) {
+                float a0 = 2*PI*j/slices, a1 = 2*PI*(j+1)/slices;
+                rlNormal3f(0.0f, 1.0f, 0.0f);
+                rlVertex3f(c.x, c.y, c.z);
+                rlVertex3f(c.x+r*std::cos(a0), c.y, c.z+r*std::sin(a0));
+                rlVertex3f(c.x+r*std::cos(a1), c.y, c.z+r*std::sin(a1));
+            }
+            rlEnd();
+        }
+
+        // Roof aquarium (a fishbowl), resting on the roof (y1.18). Three layers sell "water in
+        // glass": an inner WATER dome (more opaque, teal) capped by a flat water-SURFACE disk,
+        // inside a very-transparent GLASS bowl whose top is cut open flat. Drawn in the glass
+        // pass with depth-write off + culling off so the translucent layers blend cleanly.
+        constexpr float AQ_RADIUS = 0.35f;
+        // On the front bench, right side. y rests on the cushion top (y-0.24); x>0 = right side
+        // (flip the sign for the left); z is along the bench. The fish (FISH_CENTER) follows it.
+        constexpr Vector3 AQ_CENTER{0.40f, -0.24f + AQ_RADIUS, -1.0f};
+        void drawAquarium(bool wire) {
+            const float R = AQ_RADIUS;
+            const Color glass = Color{GLASS_BLUE.r, GLASS_BLUE.g, GLASS_BLUE.b, 42};  // very see-through
+            const Color water = Color{74, 168, 196, 128};                            // teal, see the fish through it
+            const Color surf  = Color{180, 224, 240, 150};                           // water top
+            const float bowlTop = 52.0f * DEG2RAD;    // glass cut open here (flat rim)
+            const float waterLat = 16.0f * DEG2RAD;   // waterline
+            const float wr = 0.9f * R * std::cos(waterLat);
+            const float wy = AQ_CENTER.y + 0.9f * R * std::sin(waterLat);
+            const Vector3 surfC{AQ_CENTER.x, wy, AQ_CENTER.z};
+            const int rg = wire ? 8 : 12, sl = wire ? 14 : 18;
+            if (!wire) { rlDrawRenderBatchActive(); rlDisableBackfaceCulling(); rlDisableDepthMask(); }
+            drawSphere(AQ_CENTER, 0.9f*R, -PI*0.5f, waterLat, rg, sl, water, wire);  // water body
+            drawDisk(surfC, wr, sl, surf, wire);                                     // water surface
+            drawSphere(AQ_CENTER, R, -PI*0.5f, bowlTop, rg, sl, glass, wire);        // open glass bowl
+            if (!wire) { rlDrawRenderBatchActive(); rlEnableDepthMask(); rlEnableBackfaceCulling(); }
+        }
+
+        // Orange goldfish inside the aquarium: a cube body + a pyramid tail.
+        // Total length = half the aquarium radius. Head points -Z.
+        constexpr Color FISH_ORANGE{255, 130, 30, 255};
+        // --- Goldfish knobs (tweak these to move/resize the fish) ---
+        constexpr float FISH_LENGTH = AQ_RADIUS * 0.5f;  // total length (head -> tail tip)
+        constexpr Vector3 FISH_CENTER{AQ_CENTER.x, AQ_CENTER.y - 0.05f, AQ_CENTER.z};  // inside the bowl
+        void drawGoldfish(bool wire) {
+            const float L = FISH_LENGTH;
+            const Color o = FISH_ORANGE;
+            rlPushMatrix();
+            rlTranslatef(FISH_CENTER.x, FISH_CENTER.y, FISH_CENTER.z);
+            // Body: a cube tilted 45 deg about its WIDTH axis (rotated about its own centre) so
+            // its SIDE profile is a diamond -- a pointed head (-Z) and a pointed tail-junction
+            // (+Z), like the reference.
+            rlPushMatrix();
+            rlTranslatef(0.0f, 0.0f, -0.182f*L);
+            rlRotatef(45.0f, 1.0f, 0.0f, 0.0f);
+            drawBox(Vector3{0.0f, 0.0f, 0.0f}, Vector3{0.45f*L, 0.45f*L, 0.45f*L}, o, wire);  // diamond body
+            rlPopMatrix();
+            // Tail: a big flat triangular fin from the body's rear diamond point out to a tall
+            // thin back edge (a clear triangle in profile, ~the size of the body).
+            const Vector3 A{0.0f, 0.0f, 0.136f*L};
+            const float w = 0.30f*L, h = 0.30f*L, zb = 0.42f*L;
+            const Vector3 B0{-w,-h,zb}, B1{w,-h,zb}, B2{w,h,zb}, B3{-w,h,zb};
+            if (wire) {
+                rlBegin(RL_LINES); rlColor4ub(o.r,o.g,o.b,o.a);
+                const Vector3 base[4] = {B0,B1,B2,B3};
+                for (int i = 0; i < 4; ++i) {
+                    rlVertex3f(A.x,A.y,A.z); rlVertex3f(base[i].x,base[i].y,base[i].z);
+                    rlVertex3f(base[i].x,base[i].y,base[i].z);
+                    rlVertex3f(base[(i+1)%4].x,base[(i+1)%4].y,base[(i+1)%4].z);
+                }
+                rlEnd();
+            } else {
+                rlBegin(RL_TRIANGLES); rlColor4ub(o.r,o.g,o.b,o.a);
+                emitTri(A,B1,B0); emitTri(A,B2,B1); emitTri(A,B3,B2); emitTri(A,B0,B3);  // sides
+                emitTri(B0,B1,B2); emitTri(B0,B2,B3);                                    // base fin
+                rlEnd();
+            }
+            // Two small black eyes (short cylinders) on the head sides, drawn AFTER the body and
+            // sticking out PROUD of it so they sit on top and aren't buried by the body.
+            const Color eye = Color{15, 15, 18, 255};
+            for (int sx = -1; sx <= 1; sx += 2) {
+                rlPushMatrix();
+                rlTranslatef(sx * 0.225f*L, 0.06f*L, -0.30f*L);  // upper-front side of the head
+                rlRotatef(90.0f, 0.0f, 0.0f, 1.0f);              // cylinder axis +Y -> sideways (X)
+                drawCylinder(Vector3{0.0f, 0.0f, 0.0f}, 0.085f*L, 0.13f*L, eye, wire, 10);
+                rlPopMatrix();
+            }
+            rlPopMatrix();
+        }
+
         // Windshield: the body's raked front-top (roof front -> just above the emblem) IS the
         // frame. That rake (the hull edge skipped in drawBodyShell) is drawn here as a body-
         // colour border around a rectangular opening, with ONE glass rectangle rotated to the
@@ -328,7 +586,7 @@ namespace raylibgl::model {
             const Color body = BODY_TURQUOISE;
             // Semi-transparent glass: keep the blue hue, drop the alpha so the body/scene
             // behind shows through. (The frame + reveals stay fully opaque body colour.)
-            const Color glass = Color{GLASS_BLUE.r, GLASS_BLUE.g, GLASS_BLUE.b, 165};
+            const Color glass = Color{GLASS_BLUE.r, GLASS_BLUE.g, GLASS_BLUE.b, 140};
             const Vector3 N{0.0f, 0.391f, -0.920f};  // rake outward normal (front-up)
             // Point on the rake surface at along-rake fraction t (0=emblem top, 1=roof) and width x.
             auto P = [](float t, float x) {
@@ -559,6 +817,8 @@ namespace raylibgl::model {
         ensureResourcesLoaded();
         drawGround(wire);           // asphalt base that catches the headlight spotlights
         drawChassis(wire);          // one-mesh body hull + grey bumpers + roof bars
+        drawSeats(wire);            // front bench seat (solid cubes; shows in wireframe too)
+        drawGoldfish(wire);         // orange fish floating on the roof beside the aquarium
         drawWheels(wire);           // 4 cylinder wheels
         drawFrontLogo(wire);        // front emblem
         drawHeadlightHousings(wire);// grey light surrounds (lit)
@@ -598,9 +858,25 @@ namespace raylibgl::model {
         rlSetBlendMode(RL_BLEND_ALPHA);
     }
 
-    // Semi-transparent windshield (its opaque body-colour frame + the glass). Draw LAST.
+    // Transparent parts. The aquarium is drawn FIRST: it sits inside the cabin, so the
+    // windshield/door glass must blend OVER it (drawing it after would let those windows'
+    // depth occlude it). Windshield + side glass then follow.
     void drawCarGlass(bool wire) {
+        drawAquarium(wire);  // inside the cabin -> behind the windows, so draw it before them
         drawWindshield(wire);
+        if (wire) {
+            drawDoorGlass(-1, wire);
+            drawDoorGlass(1, wire);
+            return;
+        }
+        // Side-facing door glass: draw double-sided (a single transparent quad each) so it
+        // reads from both inside and out without depending on winding.
+        rlDrawRenderBatchActive();
+        rlDisableBackfaceCulling();
+        drawDoorGlass(-1, wire);
+        drawDoorGlass(1, wire);
+        rlDrawRenderBatchActive();
+        rlEnableBackfaceCulling();
     }
 
     void drawCar(bool wire) {
