@@ -77,6 +77,7 @@ namespace raylibgl::model {
         constexpr Color LOGO_ORANGE = Color{214, 91, 47, 255};
         constexpr Color TAIL_RED = Color{206, 42, 40, 255};
         constexpr Color GLASS_BLUE = Color{135, 206, 235, 255};
+        constexpr Color SEATS_BROWN = Color{137, 81, 41, 255};
 
         // Two red rectangle tail-lights on the rear face, sitting just above the bumper.
         constexpr float TAIL_X = 0.66f;
@@ -359,7 +360,7 @@ namespace raylibgl::model {
         // reads in wireframe too) -- a flat cushion box + a tall thin seat-back box tilted
         // slightly back, the back reaching to just under the windshield base (y0.24).
         void drawSeats(bool wire) {
-            const Color col = BODY_TURQUOISE;
+            const Color col = SEATS_BROWN;
             // ~2x larger than the first pass (width capped at ~1.8 so it doesn't poke through the
             // ~1.98-wide cabin; thickness, depth and back height doubled).
             drawBox(Vector3{0.0f, -0.36f, -1.00f}, Vector3{1.5f, 0.24f, 0.72f}, col, wire);  // cushion
