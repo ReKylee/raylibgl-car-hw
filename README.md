@@ -1,123 +1,162 @@
 # raylibgl-car-hw
 
-OpenGL **Model & Viewer** exercise (Shenkar, Applied Computer Graphics, Ex3),
-implemented in **C++ with [raylib](https://www.raylib.com/) + rlgl**.
+Ex3 "Model & Viewer" for Shenkar's Applied Computer Graphics course, written in
+C++ with [raylib](https://www.raylib.com/) and rlgl. The model is a Scooby-Doo
+"Mystery Machine" van; the viewer gives you trackball rotation, perspective zoom,
+lighting, and the wireframe / axes / light-marker toggles the assignment asks for.
 
-The goal is a hierarchical **car** model (a Scooby-Doo "Mystery Machine" van)
-with an interactive viewer: trackball rotation, perspective zoom, lighting, and
-the standard wireframe / axes / light-marker toggles. The original assignment is
-fixed-function OpenGL (Java/JOGL); rlgl's immediate mode (`rlBegin` / `rlVertex3f`
-/ `rlPushMatrix`) is the direct translation of that API.
+The original exercise targets fixed-function OpenGL (Java/JOGL). rlgl's immediate
+mode (`rlBegin` / `rlVertex3f` / `rlPushMatrix`) maps onto that API almost
+one-to-one, so the same modeling and matrix-stack techniques apply.
 
-## Build & run
+## Build and run
 
-Requires **CMake 3.15+**, **clang** (forced in `CMakeLists.txt`), and **Ninja**.
-raylib 6.0 is fetched automatically via CMake `FetchContent`.
+You need CMake 3.15+, clang (forced in `CMakeLists.txt`), and Ninja. raylib 6.0
+and raygui are fetched automatically by `FetchContent`.
 
 ```sh
 cmake -S . -B build -G Ninja
 cmake --build build
-./bin/raylibgl            # Windows: bin\raylibgl.exe
+bin/raylibgl.exe        # on Linux/macOS: ./bin/raylibgl
 ```
 
-> **Note:** the exit key is **F10** (not Esc). The running app locks the
-> executable, so **close it before rebuilding** or the link step fails with
-> "permission denied".
-
-New source files under `src/` are picked up automatically (CMake
-`GLOB_RECURSE CONFIGURE_DEPENDS`) — no need to edit `CMakeLists.txt`.
+The exit key is F10, not Esc. A running instance holds a lock on the executable,
+so close it before rebuilding or the link step fails with "permission denied".
+Source files under `src/` are globbed with `CONFIGURE_DEPENDS`, so new files are
+picked up without touching `CMakeLists.txt`. The `assets/` folder is copied next
+to the executable as part of the build.
 
 ## Controls
 
 | Input | Action |
 |---|---|
 | Left-drag | Rotate the model (virtual trackball) |
-| Mouse wheel | Zoom |
-| `P` | Toggle wireframe / filled |
-| `A` | Toggle XYZ axes |
-| `O` | Toggle orthographic / perspective (dev aid, not required) |
+| Mouse wheel | Zoom (moves the camera, perspective only) |
+| `P` | Wireframe / filled polygons |
+| `A` | XYZ axes on/off |
+| `L` | Light-source marker spheres on/off |
+| `O` | Orthographic / perspective (design aid) |
+| `G` | Floor grid (design aid) |
+| `X` | Axes rotate with the model |
+| `R` | Reset rotation |
 | `F10` | Quit |
-| `L` | *(planned)* toggle light-source markers |
+
+The same toggles are available in a collapsible raygui debug panel, drawn over
+the 3D view by `DebugControls`.
 
 ## Project layout
 
 ```
 src/
-  main.cpp                 entry point; window size + title
+  main.cpp                   entry point; window size + title
   app/
-    Application.{hpp,cpp}  window, main loop, input toggles, scene draw
-    TrackballCamera.{hpp,cpp}  Camera3D (view + zoom + proj) + trackball rotation
-    DebugControls.{hpp,cpp}    (inherited, currently disabled/commented)
+    Application.{hpp,cpp}     window, main loop, lighting shader, draw passes
+    TrackballCamera.{hpp,cpp} Camera3D (view + zoom + projection) + trackball rotation
+    DebugControls.{hpp,cpp}   raygui overlay panel + key handling
   model/
-    Primitives.{hpp,cpp}   small draw helpers: drawAxes, drawBox, drawCylinder
-    Scooby-van.{hpp,cpp}   the van model: drawChassis / drawWheel / drawLight / drawCar
-car-parts.md               traced part positions/sizes for the van (build reference)
+    Primitives.{hpp,cpp}      drawAxes, drawBox, drawCylinder (hand-set normals)
+    Scooby-van.{hpp,cpp}      the van; Scooby-van.cpp is generated (see below)
+  reference/                  the source glTF's embedded texture, kept for reference
+assets/
+  MysteryMachineSideDecal.png the flame side stripe
+car-parts.md                  early hand-traced blockout (historical reference)
 ```
 
-### How it works
-- **Viewing:** `TrackballCamera` keeps a fixed `Camera3D` (eye looking at the
-  origin) for the view + wheel zoom, and an accumulated rotation `Matrix` from
-  the trackball (assignment Appendix A). The rotation is applied to the geometry
-  via `rlMultMatrixf` inside `BeginMode3D` — i.e. the **world rotates about the
-  origin in the ModelView**, the camera does not move.
-- **Drawing:** `Application::drawSceneRlgl()` calls `model::drawCar()`, which
-  composes the van from `drawChassis` / `drawWheel` (+ inline roof-rack, bumper
-  and door parts) using the rlgl matrix stack (`rlPushMatrix` / `rlTranslatef`).
-  `drawCar` re-centers the model's visual center (0, 1.24, 0) onto the origin so
-  the trackball rotates about the middle of the van. Parts that map to a box or
-  cylinder use `model::drawBox` / `model::drawCylinder` (which pick the filled or
-  `...Wires` variant from the wireframe toggle); the tapered body and the door
-  use a local `drawExtrudedX` helper — a Y-Z silhouette extruded along X, with
-  ear-clipping triangulated end-caps so concave profiles (e.g. the door) render
-  correctly. Coordinates throughout match `car-parts.md` (Y up, front = −Z).
-- **Culling:** back-face culling is on (`rlEnableBackfaceCulling`, CCW = front).
+The generator lives one level up, in `scooby-do-the-mystery-machine_zip/`
+(`gen2.py` + `template2.cpp`).
 
-## Status
+## How it works
 
-**Done:** resizable window, virtual trackball, perspective + zoom, back-face
-culling, axes toggle (`A`), wireframe toggle (`P`), primitive wrappers.
+### Viewing
 
-**Van model:** the placeholder car is replaced by the real Mystery Machine van
-in `model/Scooby-van.{hpp,cpp}`, built incrementally from `car-parts.md` and
-composed in `drawCar` via the rlgl matrix stack (each part modeled once at a
-local origin and mirrored with `rlTranslatef`). Required features:
-- **Chassis** — done: one turquoise tapered solid (hexagonal Y-Z side profile
-  extruded along X via `drawExtrudedX`), not two boxes. Filled polygons.
-- **Doors** — done: a darker-turquoise filled *trapezoid* panel per side (5-vertex
-  profile) **plus the required door-seam outline drawn as wireframe lines, always
-  (independent of `P`)** — `drawProfileOutline`.
-- **Windows** — **TODO (required):** filled polygons (windshield + side windows).
-  The only required modeling element still missing. (Intended approach: flat
-  filled quads laid on the body faces, nudged slightly proud to avoid z-fighting
-  — prototyped once, then reverted.)
-- **Tires ×4** — done: dark cylinders bounded by disks, axle along X, at the four
-  corners.
-- **Front lights ×2** — done as geometry: yellow cylinders bounded by disks on the
-  −Z face (no light source yet — see lighting below).
+`TrackballCamera` keeps a fixed `Camera3D` looking at the origin and accumulates a
+rotation `Matrix` from the trackball (Appendix A: project the mouse onto a sphere
+before and after a drag, build the rotation between the two vectors, compose it
+onto the stored matrix). `drawSceneRlgl` applies that matrix with `rlMultMatrixf`
+inside `BeginMode3D`, so the world rotates about the origin in the ModelView and
+the camera itself never moves. Zoom moves the camera along its view direction.
+The window is resizable; the projection uses the live aspect ratio so the image
+never distorts.
 
-Embellishments (allowed extras): metal-grey roof-rack slats, front/back bumpers,
-yellow rear tail-lights, a front-mounted spare tire, and side mirrors.
+### Modeling
 
-**Still required (left to the lighting pass — being handled separately):**
-1. Lighting — ≥2 positional lights, demonstrate diffuse + specular, set
-   materials, hand-set normals (enable `GL_NORMALIZE`-equivalent). Custom geometry
-   here (`drawExtrudedX`, the door outline) currently emits **no `rlNormal3f`** —
-   normals must be added for correct shading.
-2. Light-source marker spheres + `L` toggle (emissive only).
+The car is composed in `drawCar` from one helper per feature, each wrapping its
+geometry in `rlPushMatrix` / `rlPopMatrix` so it works in its own local frame.
+Repeated parts are modeled once and placed with translations:
 
-### Known caveats
-- **Built-in cylinders have no normals** ([raylib #4808](https://github.com/raysan5/raylib/issues/4808)),
-  so `DrawCylinderEx` wheels/lights won't light correctly. At the lighting step,
-  switch the lit cylinders to a mesh (`GenMeshCylinder`), restore a handmade
-  cylinder, or compute normals in-shader.
-- **`glPolygonMode` wireframe** (`rlEnableWireMode`) rendered nothing on this
-  setup, so wireframe uses the `...Wires` line variants instead (reliable, and
-  portable to GLES/web).
-- **Doors are wireframe lines** (a modeling requirement) — the seam outline is
-  drawn as lines always, independent of the `P` toggle, via `drawProfileOutline`.
+- The whole body is a single extruded-hull mesh (`drawBodyShell`): a side
+  silhouette in the Y-Z plane, swept across the width, with a half-hexagon
+  wheel-arch notch at each end. Front and back come out near-symmetric, so the
+  left and right walls are the same outline emitted at `+x` and `-x`.
+- Four wheels share one `drawWheel`, placed at the four axle positions. A wheel is
+  a `drawCylinder` tyre (a cylinder capped by two disks) with a badge on each face.
+- The front emblem and the wheel-face badges are the same "yellow disk plus three
+  crossing sticks" shape, modeled once in `drawEmblem` and oriented by the caller.
+- The windshield and both front doors are framed inset windows: a body-colour
+  frame, reveal walls stepping inward, and a recessed semi-transparent glass quad.
+- Head and tail lights, side mirrors, the bench seat, grey bumpers, roof bars, and
+  the roof aquarium with its goldfish round out the model.
 
-## Reference model
+Symmetry is done with rotations and translations rather than a negative scale, so
+front faces stay wound the same way and no `rlSetFrontFace` flip is needed.
 
-`car-parts.md` holds positions/sizes traced loosely from a low-poly Mystery
-Machine glTF. The glTF is used **only as a visual reference** — no external mesh
-files are loaded (the assignment forbids it).
+### Lighting
+
+raylib 6's default shader does not do the per-light work the assignment wants, so
+`Application` loads a small GLSL shader (`LIGHTING_VERTEX_SHADER` /
+`LIGHTING_FRAGMENT_SHADER`). It runs two positional point lights (one warm, one
+cool), each contributing Lambert diffuse and Blinn-Phong specular, plus a soft
+hemispheric ambient term and a thin fresnel rim. Two cone spotlights ride along
+with the van at the headlights and throw a warm pool onto the ground in front.
+
+The head and tail light cores reuse the same shader with an emission term turned
+up, so they output their own colour instead of being shaded; an additive bloom
+halo is drawn over them afterwards. Marker spheres sit at the two point-light
+positions and are emissive only (unaffected by the lights); `L` hides them.
+
+Normals are set by hand everywhere the geometry is emitted (`rlNormal3f` in the
+hull sweep, the cylinder walls, the quads, the sphere bands). Because the model is
+drawn in immediate mode under `rlPushMatrix`, rlgl bakes the trackball transform
+straight into the vertices, so the shader reads `vertexPosition` / `vertexNormal`
+directly rather than re-applying `matModel`.
+
+Back-face culling is enabled (CCW front). It is switched off in two narrow places:
+the body hull, so the cabin interior is visible through the glass, and the
+double-sided window glass.
+
+## The generated model file
+
+`model/Scooby-van.cpp` is generated, not written by hand. `gen2.py` reads the
+Blockbench glTF in `scooby-do-the-mystery-machine_zip/source/`, throws away the
+~127 body cuboids (the hull mesh replaces them), keeps the two roof bars as a baked
+data table, and substitutes that table into `template2.cpp` (which holds all the
+actual drawing code). To change the model, edit `template2.cpp` and re-run:
+
+```sh
+cd ../scooby-do-the-mystery-machine_zip
+python gen2.py
+```
+
+Editing `Scooby-van.cpp` directly is pointless because the next generator run
+overwrites it.
+
+## Mapping to the assignment
+
+| Requirement | Where |
+|---|---|
+| Polygons (filled) | hull, doors, windows, bumpers, seats — triangles and quads |
+| Cylinder bounded by disks | `drawCylinder` (tyres, emblem disks, fish eyes) |
+| Recursive matrix-stack structure | one helper per feature, each under `rlPushMatrix` |
+| Model each part once, mirror | wheels x4, lights x2, doors, decal, badges |
+| Trackball rotation | `TrackballCamera` (Appendix A) |
+| Perspective + zoom | `Camera3D`, wheel moves the camera |
+| Resizable, non-distorting window | `FLAG_WINDOW_RESIZABLE`, aspect-correct projection |
+| `P` / `A` / `L` toggles | `DebugControls` |
+| >= 2 positional lights, diffuse + specular | lighting shader, two point lights |
+| Light-marker spheres (emissive), `L` to hide | `drawLightMarkers` |
+| Hand-set normals | every emitted primitive |
+| Back-face culling | on by default (CCW front) |
+
+Beyond the minimum, the model adds spotlights, emissive light cores with bloom,
+the framed inset doors and windows, the textured side decal, mirrors, a bench
+seat, and the roof aquarium.
