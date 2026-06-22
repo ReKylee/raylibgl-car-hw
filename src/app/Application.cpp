@@ -49,10 +49,6 @@ out vec2 fragTexCoord;
 out vec4 fragColor;
 out vec3 fragNormal;
 
-// We draw in rlgl IMMEDIATE MODE under rlPushMatrix, so rlgl bakes the model (trackball)
-// transform straight into vertexPosition/vertexNormal -- they are ALREADY in world space.
-// Use them directly: multiplying by matModel would apply the transform a second time and
-// put the geometry in a different frame than the world-space lights (incl. the spotlights).
 void main()
 {
     fragPosition = vertexPosition;
@@ -120,7 +116,6 @@ vec3 applyPointLight(vec3 normal, vec3 viewDir, vec3 position, vec4 color, int e
 
     vec3 lightDir = normalize(position - fragPosition);
     float distanceToLight = length(position - fragPosition);
-    // Gentle attenuation so both lights comfortably reach the model.
     float attenuation = 1.0 / (1.0 + 0.022 * distanceToLight + 0.0019 * distanceToLight * distanceToLight);
 
     float diffuse = max(dot(normal, lightDir), 0.0);
@@ -154,7 +149,7 @@ void main()
     float fresnel = pow(1.0 - max(dot(normal, viewDir), 0.0), 4.0);
     lighting += fresnel * vec3(0.35, 0.45, 0.60) * 0.45;
 
-    // Headlight spotlights (cast a warm pool on the ground in front of the van).
+    // Headlight spotlights.
     if (spotEnabled == 1) {
         lighting += applySpot(0, normal);
         lighting += applySpot(1, normal);
@@ -193,7 +188,6 @@ void main()
         SetExitKey(KEY_F10);
         SetTargetFPS(TARGET_FPS);
 
-        // Exercise requirement: back-face culling remains enabled.
         rlEnableBackfaceCulling();
         rlEnableDepthTest();
 

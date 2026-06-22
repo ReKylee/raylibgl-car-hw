@@ -191,6 +191,13 @@ namespace raylibgl::model {
             drawBox(Vector3{0.0f, -0.78f, -1.96f}, Vector3{2.12f, 0.34f, 0.26f}, METAL_GREY, wire);  // front bumper
             drawBox(Vector3{0.0f, -0.78f, 1.96f}, Vector3{2.12f, 0.34f, 0.26f}, METAL_GREY, wire);   // rear bumper
 
+            // Belly pan: one flat panel closing the open underbody between the four wheels.
+            // The wheel-arch notches leave the bottom open down to ARCH_Y, so from below the
+            // inner gap reads as hollow; this fills it. Spans inboard of the wheels (half-width
+            // 0.615 = the tyre inner faces) and the full wheelbase; top tucked just under the
+            // floor line (BODY_BOTTOM) so it doesn't z-fight the existing floor strips.
+            drawBox(Vector3{0.0f, BODY_BOTTOM + 0.25f, 0.0f}, Vector3{1.03f, 0.51f, 2.84f}, col, wire);  // belly pan
+
             if (wire) {
                 rlBegin(RL_LINES);
                 rlColor4ub(col.r, col.g, col.b, col.a);
