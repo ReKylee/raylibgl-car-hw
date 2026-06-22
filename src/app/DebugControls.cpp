@@ -1,7 +1,5 @@
 #include "app/DebugControls.hpp"
-
 #include "app/TrackballCamera.hpp"
-
 #include "raygui.h"
 
 #include <algorithm>
@@ -27,19 +25,23 @@ namespace raylibgl::app::debug {
 
         bool styleLoaded = false;
 
+        /// @brief Window-height-driven UI scale factor, clamped to a sane range.
         float UiScale() {
             const float raw = static_cast<float>(GetScreenHeight()) / REFERENCE_HEIGHT;
             return std::clamp(raw, MIN_SCALE, MAX_SCALE);
         }
 
+        /// @brief Scale a float metric by @p uiScale.
         float ScaleF(float value, float uiScale) {
             return value * uiScale;
         }
 
+        /// @brief Scale an integer metric by @p uiScale, rounded to the nearest pixel.
         int ScaleI(int value, float uiScale) {
             return static_cast<int>(static_cast<float>(value) * uiScale + 0.5f);
         }
 
+        /// @brief Current debug-panel rectangle, scaled and clamped to the window width.
         Rectangle PanelBounds() {
             const float scale = UiScale();
             const int margin = ScaleI(PANEL_MARGIN, scale);
@@ -54,10 +56,14 @@ namespace raylibgl::app::debug {
             };
         }
 
-        // Load the amber style once. GuiLoadStyle replaces the whole global style
-        // (colors, metrics and font), so after this call we never touch GuiSetStyle --
-        // every widget below paints itself straight from the loaded .rgs. raygui keeps
-        // it in global state, so reloading per-frame would just re-read the file for nothing.
+        /**
+         * @brief Load the amber raygui style once.
+         *
+         * GuiLoadStyle replaces the whole global style (colours, metrics, font), so after
+         * this call every widget paints itself from the loaded .rgs and we never touch
+         * GuiSetStyle. raygui keeps the style in global state, so reloading per-frame would
+         * just re-read the file for nothing.
+         */
         void LoadStyleOnce() {
             if (styleLoaded) {
                 return;
@@ -70,8 +76,7 @@ namespace raylibgl::app::debug {
             GuiLoadStyle(path);
         }
 
-        // Small framed FPS readout. The frame colors come from the active style so it
-        // matches whatever .rgs is loaded; DrawFPS itself is raylib's built-in counter.
+        /// @brief Draw the small framed FPS readout.
         void DrawFpsPill() {
             const Color bg = GetColor(static_cast<unsigned int>(GuiGetStyle(DEFAULT, BACKGROUND_COLOR)));
             const Color border = GetColor(static_cast<unsigned int>(GuiGetStyle(DEFAULT, BORDER_COLOR_NORMAL)));
@@ -128,14 +133,13 @@ namespace raylibgl::app::debug {
         const float scale = UiScale();
         const Rectangle panel = PanelBounds();
 
-        // Titled, closable container -- raygui paints the background, border, title bar
-        // and the close button entirely from the style.
+        // Titled, closable container
         if (GuiWindowBox(panel, "#140# VIEWER DEBUG")) {
             state.panelVisible = false;
         }
 
         // Layout cursor. raygui has no layout manager, so we step a uniform row height
-        // down a single column (the idiomatic raygui example pattern).
+        // down a single column.
         const float pad = ScaleF(12.0f, scale);
         const float rowH = ScaleF(24.0f, scale);
         const float gap = ScaleF(6.0f, scale);
@@ -171,8 +175,6 @@ namespace raylibgl::app::debug {
         check("Wireframe polygons  [P]", &state.wireframe);
         check("XYZ axes  [A]", &state.showAxes);
 
-        // "Axes rotate with model" only means something when the axes are drawn,
-        // so grey it out (style-driven disabled look) when axes are hidden.
         if (!state.showAxes) {
             GuiSetState(STATE_DISABLED);
         }
@@ -186,13 +188,13 @@ namespace raylibgl::app::debug {
         y += gap;
         section("Camera");
 
-        // Projection is a binary state -> a checkbox that mirrors the camera.
+        // Projection toggle.
         bool perspective = camera.IsPerspective();
         if (check("Perspective projection  [O]", &perspective)) {
             camera.ToggleProjection();
         }
 
-        // Resetting the rotation is a one-shot action -> a button.
+        // Reset rotation button.
         if (button("Reset rotation  [R]")) {
             camera.ResetRotation();
         }
@@ -209,7 +211,7 @@ namespace raylibgl::app::debug {
     }
 
     bool WantsMouseCapture(const State& state) {
-        // Swallow clicks on the collapsed "open" button so they don't rotate the model.
+        // Ignore clicks on the collapsed "open" button so they don't rotate the model.
         if (!state.panelVisible) {
             return CheckCollisionPointRec(GetMousePosition(), OPEN_BUTTON);
         }

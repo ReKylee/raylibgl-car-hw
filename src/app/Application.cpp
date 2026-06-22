@@ -161,11 +161,13 @@ void main()
 }
 )glsl";
 
+        /// @brief Upload a Vector3 to a vec3 shader uniform.
         void setVector3Uniform(Shader shader, int loc, Vector3 value) {
             const float data[3] = {value.x, value.y, value.z};
             SetShaderValue(shader, loc, data, SHADER_UNIFORM_VEC3);
         }
 
+        /// @brief Upload a Color (0-255) to a vec4 shader uniform, normalised to 0..1.
         void setColorUniform(Shader shader, int loc, Color color) {
             const float data[4] = {
                 static_cast<float>(color.r) / 255.0f,
@@ -268,24 +270,23 @@ void main()
 
         BeginShaderMode(m_lightingShader);
         {
-            // 1) Opaque body, lit by the scene lights (emission off).
+            // Opaque body, lit by the scene lights (emission off).
             SetShaderValue(m_lightingShader, m_emissionLoc, &emissiveOff, SHADER_UNIFORM_FLOAT);
             model::drawCarBody(false);
             rlDrawRenderBatchActive();  // flush so the emission change below doesn't affect the body
 
-            // 2) Head/tail light cores as an EMISSIVE material (MATERIAL_MAP_EMISSION-style):
-            //    they output their own colour on top of the lighting, so they read as lit lamps.
+            // Head/tail light cores as an EMISSIVE material (MATERIAL_MAP_EMISSION-style):
+            // they output their own colour on top of the lighting, so they read as lit lamps.
             SetShaderValue(m_lightingShader, m_emissionLoc, &emissiveOn, SHADER_UNIFORM_FLOAT);
             model::drawCarLights(false);
             rlDrawRenderBatchActive();
 
-            // 3) Semi-transparent windshield, drawn last (emission off) so alpha blends over the body.
+            // Semi-transparent windshield, drawn last (emission off) so alpha blends over the body.
             SetShaderValue(m_lightingShader, m_emissionLoc, &emissiveOff, SHADER_UNIFORM_FLOAT);
             model::drawCarGlass(false);
         }
         EndShaderMode();
 
-        // 4) Additive bloom halos around the lights (not a surface material -- a glow effect).
         model::drawCarGlow(false);
     }
 
@@ -348,9 +349,6 @@ void main()
         const Camera3D camera = m_camera.GetCamera();
         setVector3Uniform(m_lightingShader, m_viewPosLoc, camera.position);
 
-        // The exercise requires two positional lights. The debug [L] toggle hides
-        // their marker spheres, not the lighting itself, so the shaded model stays
-        // useful while the UI is decluttered.
         for (int i = 0; i < LIGHT_COUNT; ++i) {
             const int enabled = 1;
             SetShaderValue(m_lightingShader, m_lightEnabledLoc[i], &enabled, SHADER_UNIFORM_INT);

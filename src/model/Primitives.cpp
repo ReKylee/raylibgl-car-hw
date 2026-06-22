@@ -10,6 +10,7 @@ namespace raylibgl::model {
 
         constexpr float TWO_PI = 6.28318530717958647692f;
 
+        /// @brief Point on a cylinder of given @p radius at height @p y and ring @p angle.
         Vector3 cylinderPoint(Vector3 center, float radius, float y, float angle) {
             return {
                 center.x + std::sin(angle) * radius,
@@ -18,10 +19,12 @@ namespace raylibgl::model {
             };
         }
 
+        /// @brief Outward side normal of a +Y cylinder at the given ring @p angle.
         Vector3 cylinderNormal(float angle) {
             return {std::sin(angle), 0.0f, std::cos(angle)};
         }
 
+        /// @brief Emit one normal + vertex pair into the active rlgl batch.
         void emitVertex(Vector3 normal, Vector3 point) {
             rlNormal3f(normal.x, normal.y, normal.z);
             rlVertex3f(point.x, point.y, point.z);
