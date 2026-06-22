@@ -1,5 +1,7 @@
 # raylibgl-car-hw
 
+By: Kylee Benisty and Peleg Ben Dor
+
 Ex3 "Model & Viewer" for Shenkar's Applied Computer Graphics course - Scooby-Doo "Mystery Machine" van modeled in C++ with [raylib](https://www.raylib.com/) and rlgl.
 
 ## Dependencies
