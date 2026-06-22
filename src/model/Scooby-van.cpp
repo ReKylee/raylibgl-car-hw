@@ -319,7 +319,7 @@ namespace raylibgl::model {
         // reaching to just under the windshield base. Solid boxes, so it reads in wireframe.
         void drawSeats(bool wire) {
             const Color col = SEATS_BROWN;
-            drawBox(Vector3{0.0f, -0.36f, -1.00f}, Vector3{1.5f, 0.24f, 0.72f}, col, wire);  // cushion
+            drawBox(Vector3{0.0f, -0.26f, -1.00f}, Vector3{1.5f, 0.14f, 0.72f}, col, wire);  // cushion
             rlPushMatrix();
             rlTranslatef(0.0f, -0.24f, -0.64f);   // pivot at the back of the cushion
             rlRotatef(13.0f, 1.0f, 0.0f, 0.0f);   // tilt the seat-back top backward
